@@ -1,5 +1,19 @@
 # Open-Source Local Granola — Implementation Plan
 
+> **Superseded — kept for the reasoning, not the instructions.**
+>
+> This is the original plan, written before the spikes. Its research and
+> product thinking still hold, but its architecture does not: it specifies
+> **Tauri v2 + a Rust core + llama.cpp with Qwen3-8B**, and the project is
+> **native SwiftUI on Apple frameworks with zero dependencies**.
+>
+> The spikes showed every core capability on macOS 26 is native Swift — Core
+> Audio taps, `SpeechAnalyzer`, Foundation Models, EventKit — so a Rust core
+> would have been an FFI shim around Swift and nothing else.
+>
+> For what is actually built and why, read [../HANDOFF.md](../HANDOFF.md).
+> For the measurements behind the reversal, read [m0-findings.md](m0-findings.md).
+
 ## Context
 
 The user wants to build a Granola-style AI meeting notes app that is **entirely local** and **open source**. Granola's own architecture is only local at the capture layer: audio streams to Deepgram/AssemblyAI, transcripts live on AWS, and note-enhancement runs on OpenAI/Anthropic — plus training-on-your-data by default, a 25-meeting lifetime free cap, and recent lock-in moves (encrypted local cache killed community export tools). That's the gap this project fills.

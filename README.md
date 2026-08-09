@@ -38,22 +38,36 @@ flow — and removes the cloud entirely.
 | Enhancement | Apple Foundation Models, on-device |
 | Storage | Plain Markdown + JSON in `~/Documents/Oats`. Greppable, syncable, Obsidian-friendly, no lock-in |
 
-Requires macOS 26 or newer (that is where the on-device speech and language
-models live) on Apple Silicon.
+## Requirements
 
-## Try it
+| | |
+|---|---|
+| **macOS 26 or newer, Apple Silicon** | Not negotiable. `SpeechAnalyzer` and Foundation Models are what make the local promise possible and do not exist earlier |
+| **Apple Intelligence enabled** | Otherwise transcription still works but note enhancement reports itself unavailable, and you get transcripts only |
+| **Xcode or the Command Line Tools** | Only for building — see below, there is no prebuilt download yet |
+| Microphone and system-audio permission | Prompted on first run |
 
-The app:
+Two things use the network, both at setup and neither for AI: Apple's speech
+models install themselves on first use if they are not already present, and
+`git clone` is a download. Inference never leaves the machine.
+
+## Install
+
+**There is no prebuilt app to download yet.** That needs an Apple Developer ID
+so the build can be signed and notarized; until then, macOS refuses downloaded
+unsigned apps and the only honest path is to build it yourself. A notarized DMG
+and a Homebrew cask are the plan.
 
 ```bash
-cd OatsApp
-./scripts/bundle.sh debug --run     # builds Oats.app and launches it
+git clone https://github.com/yuvrajadhikari/oats.git && cd oats
+cd OatsApp && ./scripts/bundle.sh release --run
 ```
 
-Press Record (or ⇧⌘R, or the menu-bar item), type rough notes while you talk,
-and press it again to stop. Oats writes the notes to `~/Documents/Oats`.
+That builds `Oats.app` and launches it. Press Record (or ⇧⌘R, or the menu-bar
+item), type rough notes while you talk, and press it again to stop. Oats writes
+the notes to `~/Documents/Oats`.
 
-Or the CLI, which runs the same engine:
+Or the CLI, which runs the same engine and is quicker to poke at:
 
 ```bash
 cd OatsKit
@@ -101,6 +115,14 @@ negotiable:
   hard way. Worth reading before touching the capture code.
 - `spike/` — throwaway proofs of concept, superseded by `OatsKit`.
 
+## Contributing
+
+Yes please — see [CONTRIBUTING.md](CONTRIBUTING.md). If you are going anywhere
+near the audio code, read the "Hard-won gotchas" section of
+[HANDOFF.md](HANDOFF.md) first. Every failure mode in this pipeline returns
+success, so a dead capture path and a healthy one look identical unless you
+check signal levels; `oats debug-audio` is the tool for that.
+
 ## Licence
 
-MIT.
+MIT — see [LICENSE](LICENSE). One edition, no Pro tier, no open-core.

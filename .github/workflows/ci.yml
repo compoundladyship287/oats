@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    # macOS 26 is required, not preferred: SpeechAnalyzer, SpeechDetector and
+    # Foundation Models do not exist earlier, and both packages declare
+    # .macOS("26.0"). Pinned rather than macos-latest so a runner rollover
+    # cannot silently move the SDK under us.
+    runs-on: macos-26
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+          sw_vers
+
+      - name: Build engine and CLI
+        run: swift build --package-path OatsKit
+
+      # The real value of this job. These cover transcript merging, echo dedup,
+      # transcript chunking, the enhancement refusal floor, and storage — all of
+      # which run against pure inputs or a stub engine, so they need neither
+      # audio hardware nor Apple Intelligence.
+      - name: Test
+        run: swift test --package-path OatsKit
+
+      - name: Build app
+        run: swift build --package-path OatsApp
+
+      # Catches breakage in the bundling step itself — a missing Info.plist key
+      # or a renamed executable only shows up here, never in `swift build`.
+      - name: Bundle Oats.app
+        run: |
+          cd OatsApp
+          ./scripts/bundle.sh release
+          test -x build/Oats.app/Contents/MacOS/Oats
+          plutil -lint build/Oats.app/Contents/Info.plist
+
+      # A runner has no microphone, no output device, and no Apple Intelligence,
+      # so capture, transcription and enhancement cannot run here at all. This
+      # step exists to make that explicit rather than letting a green tick be
+      # read as "audio works".
+      - name: Note what CI did not cover
+        if: always()
+        run: |
+          echo "::notice::CI verified compilation and pure logic only."
+          echo "::notice::Audio capture, transcription and note enhancement are"
+          echo "::notice::untested here — no audio devices or Apple Intelligence"
+          echo "::notice::on GitHub runners. Verify those by hand; see CONTRIBUTING.md."
