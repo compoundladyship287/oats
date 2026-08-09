@@ -1,0 +1,10 @@
+.DS_Store
+.build/
+*.xcuserstate
+xcuserdata/
+node_modules/
+dist/
+target/
+*.wav
+*.gguf
+models/
