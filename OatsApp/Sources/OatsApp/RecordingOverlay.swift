@@ -12,6 +12,12 @@ struct RecordingOverlayView: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            // Says who is recording. Floating over another app with no window
+            // chrome, the pill is otherwise an anonymous timer, and a stranger
+            // seeing it on your screen has no idea what is listening.
+            OatsLogo(size: 18)
+                .accessibilityLabel("Oats")
+
             PulsingDot(paused: session.isPaused)
 
             Text(session.elapsed.clockString)
@@ -168,14 +174,34 @@ final class RecordingOverlayController {
         hosting.layoutSubtreeIfNeeded()
         var size = hosting.fittingSize
         if size.width < 40 || size.height < 20 {
-            size = NSSize(width: 220, height: 42)
+            size = Self.provisionalSize
         }
         panel.setContentSize(size)
         panel.setFrameOrigin(savedOrigin(for: panel))
 
         panel.orderFrontRegardless()
         self.panel = panel
+
+        // Correct the guess once SwiftUI has actually measured itself, so the
+        // pill fits its contents rather than a hardcoded width that silently
+        // clips whenever something is added to it.
+        DispatchQueue.main.async { [weak panel] in
+            guard let panel, let hosting = panel.contentView else { return }
+            hosting.layoutSubtreeIfNeeded()
+            let measured = hosting.fittingSize
+            guard measured.width > 40, measured.height > 20,
+                measured != panel.frame.size
+            else { return }
+            // Anchor the top-left so the pill grows rightwards and does not
+            // appear to jump when it resizes.
+            let topLeft = NSPoint(x: panel.frame.minX, y: panel.frame.maxY)
+            panel.setContentSize(measured)
+            panel.setFrameTopLeftPoint(topLeft)
+        }
     }
+
+    /// Used only until the real measurement lands, a frame later.
+    private static let provisionalSize = NSSize(width: 248, height: 42)
 
     private func hide() {
         guard let panel else { return }
