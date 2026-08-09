@@ -54,11 +54,11 @@ distribution and possibly for TCC behaviour in a packaged `.app`.
 │   ├── Sources/OatsKit/
 │   │   ├── Capture/        SystemAudioTap, MicrophoneCapture, CoreAudioSupport
 │   │   ├── Transcribe/     SpeechChannel (live ASR), Transcript (+ echo removal)
-│   │   ├── Enhance/        NoteEnhancer, NoteTemplate
+│   │   ├── Enhance/        NoteEnhancer, NoteWritingModel (engine seam), NoteTemplate
 │   │   ├── Meeting/        Meeting, MeetingStore (Markdown + JSON on disk)
 │   │   └── MeetingRecorder.swift   orchestrates both channels
 │   ├── Sources/oats/       CLI: record / list / templates / doctor / debug-audio
-│   └── Tests/OatsKitTests/ 16 tests, all passing
+│   └── Tests/OatsKitTests/ 28 tests, all passing
 └── spike/                  ← throwaway proof-of-concept, superseded by OatsKit
     └── AudioCaptureSpike/  AudioCaptureSpike, TranscribeSpike, EnhanceSpike
 ```
@@ -82,7 +82,7 @@ All measured on this machine, not assumed:
   remote sentence is removed, leaving one correctly attributed "Them" segment.
 - **Clean shutdown** — no hang at "Finishing transcription…".
 - `oats doctor` reports all four subsystems green.
-- `swift test` → **16/16 passing**.
+- `swift test` → **28/28 passing**.
 
 `oats doctor` being green is necessary but **not** sufficient: it reported all
 four subsystems healthy throughout the session in which nothing was transcribed
@@ -153,7 +153,7 @@ timeout 140 ./.build/debug/oats record --title "Echo test" --minutes 0.28 --dir 
 Result: live segments appear during recording, both speakers sit on one
 timeline, the saved transcript contains each remote sentence **once** labelled
 **Them** (4 raw segments → 2 after echo dedup), enhancement runs, notes are
-written, and the process exits cleanly in 20 s. `swift test` → 16/16.
+written, and the process exits cleanly in 20 s. `swift test` passed.
 
 ### `oats debug-audio`
 
@@ -339,6 +339,43 @@ Verified: the reported case now saves as "transcript only" and says why. A
 mid-length transcript where a topic is raised and explicitly deferred now yields
 "OKRs deferred … Priya owns the retention target … come back to this on
 Thursday" — all of it traceable to the transcript, no invented decisions.
+
+### The engine seam
+
+`NoteWritingModel` (in `Enhance/NoteWritingModel.swift`) is the boundary between
+"how Oats writes notes" and "which model does the writing". `NoteEnhancer` owns
+the prompting, the chunking, and the refusal floor; the engine only turns
+instructions plus a prompt into text, and declares its own context budget.
+
+`FoundationModelsEngine` is the default and, deliberately, the only one. Adding
+Qwen3-4B via MLX should mean writing one conformance and a settings toggle —
+no changes to prompting, chunking, the floor, or any caller.
+
+**Foundation Models must stay the default.** It is on the machine already, so
+the app works the moment it launches. Every alternative costs a multi-gigabyte
+download, and a user who only wanted to take notes should never be made to pay
+that before the app does anything. Any second engine is opt-in.
+
+Adding one is roughly 5–8 days: MLX dependency and first generation, the Qwen3
+chat template (including suppressing its thinking-mode output), a download
+manager with resume and checksums, settings UI, and notarization with the new
+dependency. Prefer MLX over llama.cpp — it is Swift-native and Metal-backed,
+where llama.cpp means a C++ build and unpredictable SwiftPM integration. Note
+that a weights download is a network call: it is *setup*, not inference, so the
+strictly-local promise holds, but it has to be explicit in the UI and the README
+or it reads as a broken commitment.
+
+**Do not start that work until a real meeting proves the 3B model inadequate.**
+Everything tested so far has been seconds of synthetic audio, which is the worst
+possible evidence for judging a summarizer, and both fabrication bugs so far
+were fixed without a bigger model.
+
+The seam paid for itself immediately in testability: the refusal floor, the
+chunking maths, and the prompt contents are now unit-tested against a stub
+engine in milliseconds, where previously every path required Apple's model —
+slow, non-deterministic, and absent on a CI runner. `NoteEnhancerEngineTests`
+pins the behaviour that matters, including that the model is never called below
+the floor.
 
 ## Roadmap from here
 

@@ -10,11 +10,10 @@ import FoundationModels
 @available(macOS 26.0, *)
 public struct NoteEnhancer: Sendable {
 
-    /// Apple's on-device model has a 4,096-token window covering prompt *and*
-    /// completion, so a long meeting cannot be enhanced in one pass. Past this
-    /// many words we condense the transcript in chunks first.
-    private static let singlePassWordLimit = 1_500
-    private static let chunkWordLimit = 1_200
+    /// The engine that actually writes. Swapping this is how a larger local
+    /// model gets added; everything below — prompting, chunking, the refusal
+    /// floor — is engine-independent and stays put.
+    public let model: any NoteWritingModel
 
     /// Below this many transcribed words, Oats refuses to write notes at all.
     ///
@@ -30,23 +29,16 @@ public struct NoteEnhancer: Sendable {
     /// only catches meetings where essentially nothing was captured.
     public static let minimumTranscriptWords = 40
 
-    public enum Availability: Sendable, Equatable {
-        case available
-        case unavailable(String)
+    public typealias Availability = ModelAvailability
+
+    public init(model: any NoteWritingModel = FoundationModelsEngine()) {
+        self.model = model
     }
 
-    public init() {}
+    public var availability: ModelAvailability { model.availability }
 
-    public static var availability: Availability {
-        switch SystemLanguageModel.default.availability {
-        case .available:
-            return .available
-        case .unavailable(let reason):
-            return .unavailable("\(reason)")
-        @unknown default:
-            return .unavailable("unknown")
-        }
-    }
+    /// Availability of the default engine, for callers that have not chosen one.
+    public static var availability: ModelAvailability { FoundationModelsEngine().availability }
 
     public func enhance(
         roughNotes: String,
@@ -67,18 +59,17 @@ public struct NoteEnhancer: Sendable {
         }
 
         let source =
-            wordCount(text) > Self.singlePassWordLimit
+            wordCount(text) > model.singlePassWordLimit
             ? try await condense(text)
             : text
 
-        let session = LanguageModelSession(instructions: instructions(for: template))
-        let response = try await session.respond(
-            to: prompt(
+        return try await model.generate(
+            instructions: instructions(for: template),
+            prompt: prompt(
                 transcript: source,
                 roughNotes: roughNotes,
                 template: template,
                 meetingTitle: meetingTitle))
-        return response.content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Prompting
@@ -156,25 +147,24 @@ public struct NoteEnhancer: Sendable {
     /// in the model's context. Chunks split on speaker turns rather than raw
     /// word counts, so an utterance is never cut in half.
     private func condense(_ transcript: String) async throws -> String {
-        let chunks = Self.chunk(transcript, maxWords: Self.chunkWordLimit)
+        let chunks = Self.chunk(transcript, maxWords: model.chunkWordLimit)
         var condensed: [String] = []
         condensed.reserveCapacity(chunks.count)
 
         for (index, chunk) in chunks.enumerated() {
-            let session = LanguageModelSession(
+            let text = try await model.generate(
                 instructions: """
                     You compress a section of a meeting transcript while losing no \
                     facts. Keep every decision, number, name, owner, date, and \
                     commitment, and keep the speaker labels. Drop only filler and \
                     small talk. Output plain lines, no preamble.
-                    """)
-            let response = try await session.respond(
-                to: """
+                    """,
+                prompt: """
                     Section \(index + 1) of \(chunks.count):
 
                     \(chunk)
                     """)
-            condensed.append(response.content.trimmingCharacters(in: .whitespacesAndNewlines))
+            condensed.append(text.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return condensed.joined(separator: "\n")
     }

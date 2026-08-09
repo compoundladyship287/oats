@@ -84,9 +84,10 @@ func runDoctor() async {
         print("on-device speech        UNAVAILABLE — \(error)")
     }
 
-    switch NoteEnhancer.availability {
+    let enhancer = NoteEnhancer()
+    switch enhancer.availability {
     case .available:
-        print("on-device language model available")
+        print("on-device language model available (\(enhancer.model.name))")
     case .unavailable(let reason):
         print("on-device language model UNAVAILABLE — \(reason)")
     }
