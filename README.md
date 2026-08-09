@@ -1,5 +1,9 @@
 # Oats
 
+[![CI](https://github.com/yuvrajadhikari/oats/actions/workflows/ci.yml/badge.svg)](https://github.com/yuvrajadhikari/oats/actions/workflows/ci.yml)
+[![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
+[![macOS 26+](https://img.shields.io/badge/macOS-26%2B%20Apple%20Silicon-black.svg)](#requirements)
+
 Locally sourced meeting notes.
 
 Oats is an open-source, local-first alternative to Granola for macOS. It listens
