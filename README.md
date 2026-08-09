@@ -114,6 +114,10 @@ the notes to `~/Documents/Oats`.
 - **Record from the menu bar** — ⌘N to start a named meeting, ⇧⌘R to stop,
   ⇧⌘P to pause. Pausing keeps the transcript continuous rather than leaving a
   gap the length of your coffee break.
+- **Floating controls while you record** — a small pill above every app and
+  every Space with the elapsed time, pause, and stop. It appears when recording
+  starts, disappears when it ends, and clicking it does not pull focus out of
+  the call you are in. Drag it anywhere; it stays put.
 - **Resume a past meeting** — pick it and hit Resume. The new audio is appended
   to the same meeting and the notes are rewritten over the whole thing, instead
   of a call that restarted after a break ending up as two unrelated entries.

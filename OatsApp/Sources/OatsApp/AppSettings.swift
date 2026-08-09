@@ -39,6 +39,7 @@ final class AppSettings {
         static let storagePath = "storagePath"
         static let showTranscriptWhileRecording = "showTranscriptWhileRecording"
         static let completedOnboarding = "hasCompletedOnboarding"
+        static let showRecordingOverlay = "showRecordingOverlay"
     }
 
     private let defaults: UserDefaults
@@ -67,6 +68,11 @@ final class AppSettings {
         didSet { defaults.set(hasCompletedOnboarding, forKey: Key.completedOnboarding) }
     }
 
+    /// The floating pill shown over other apps while recording.
+    var showRecordingOverlay: Bool {
+        didSet { defaults.set(showRecordingOverlay, forKey: Key.showRecordingOverlay) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.appearance =
@@ -77,6 +83,8 @@ final class AppSettings {
         self.showTranscriptWhileRecording =
             defaults.object(forKey: Key.showTranscriptWhileRecording) as? Bool ?? true
         self.hasCompletedOnboarding = defaults.bool(forKey: Key.completedOnboarding)
+        self.showRecordingOverlay =
+            defaults.object(forKey: Key.showRecordingOverlay) as? Bool ?? true
     }
 
     var storageURL: URL {

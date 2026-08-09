@@ -31,6 +31,10 @@ private struct GeneralSettings: View {
             }
             .pickerStyle(.segmented)
 
+            Toggle(
+                "Show floating controls while recording",
+                isOn: $settings.showRecordingOverlay)
+
             Section {
                 LabeledContent("Meetings are saved to") {
                     VStack(alignment: .leading, spacing: 6) {

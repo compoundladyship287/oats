@@ -368,6 +368,32 @@ across the gap, and `recordedDuration` excludes the pause. Verified end to end:
 a sentence spoken while paused does not reach the transcript, and a 71-second
 wall-clock meeting with a pause recorded 62 seconds.
 
+### The recording overlay
+
+`RecordingOverlayController` owns an `NSPanel`, not a SwiftUI scene. A `Window`
+would sit in the app's own layer, vanish behind Zoom, and steal focus when
+clicked; the panel is `.nonactivatingPanel`, `.statusBar` level, and joins all
+Spaces plus full-screen apps — which is where meetings actually happen.
+
+Three things that each looked like "the overlay is broken":
+
+- **`acceptsFirstMouse` must be overridden.** Oats is not the active app during a
+  meeting, so every click on the panel is a first-mouse event, which AppKit
+  swallows by default. The symptom is perfect: focus correctly stays in the
+  meeting app, the button highlights, and nothing happens.
+- **`fittingSize` is zero before layout.** Setting the content size from it gives
+  a zero-sized panel, indistinguishable from one that never appeared. Force
+  layout first, and keep a sane fallback.
+- **Observation has to live outside SwiftUI.** The overlay must work while the
+  main window is closed, and a view that is not on screen is not running, so the
+  controller uses `withObservationTracking` and re-arms itself after each change
+  (it only fires once, and fires *before* the new value is readable — hence the
+  hop to the next run-loop turn).
+
+Position is remembered, but only reused if that point still falls on a connected
+screen: an unplugged display would otherwise put the panel somewhere the user
+cannot reach it.
+
 ### Onboarding and the home screen
 
 `Diagnostics` in OatsKit is the one place that reports subsystem readiness;

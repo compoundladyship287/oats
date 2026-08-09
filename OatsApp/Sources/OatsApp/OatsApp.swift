@@ -50,11 +50,23 @@ struct OatsApp: App {
     @State private var session: MeetingSession
     @State private var library: MeetingLibrary
 
+    /// Held for its lifetime, not its value: it owns the floating panel and must
+    /// outlive the main window, since the point of the overlay is to still be
+    /// there when you are working in another app.
+    @State private var overlay: RecordingOverlayController
+
     init() {
         let settings = AppSettings()
+        let session = MeetingSession(settings: settings)
+        let library = MeetingLibrary(settings: settings)
         _settings = State(initialValue: settings)
-        _session = State(initialValue: MeetingSession(settings: settings))
-        _library = State(initialValue: MeetingLibrary(settings: settings))
+        _session = State(initialValue: session)
+        _library = State(initialValue: library)
+        _overlay = State(
+            initialValue: RecordingOverlayController(session: session, settings: settings) {
+                await session.stop()
+                library.reload()
+            })
     }
 
     var body: some Scene {
