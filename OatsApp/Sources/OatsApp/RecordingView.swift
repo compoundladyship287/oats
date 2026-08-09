@@ -18,12 +18,19 @@ struct RecordingView: View {
             RecordingHeader()
             Divider()
 
+            // No ideal widths, and modest minimums. With ideals the two panes
+            // asked for 940pt, which together with the 260pt sidebar exceeded
+            // the window; rather than shrink, the split view pushed the sidebar
+            // 41pt off the left edge and clipped it. The minimums here (560
+            // plus a 220 sidebar) fit inside the 860pt minimum window with room
+            // to spare, so nothing can be forced out of view.
             HSplitView {
                 NotepadPane(text: $session.roughNotes)
-                    .frame(minWidth: 320, idealWidth: 560)
+                    .frame(minWidth: 320, maxWidth: .infinity)
+                    .layoutPriority(1)  // the notepad gets the spare space
                 if settings.showTranscriptWhileRecording {
                     TranscriptPane(segments: session.segments)
-                        .frame(minWidth: 280, idealWidth: 380)
+                        .frame(minWidth: 240, maxWidth: .infinity)
                 }
             }
         }
@@ -39,12 +46,17 @@ private struct RecordingHeader: View {
         HStack(spacing: 12) {
             RecordingIndicator(active: session.isCapturing, paused: session.isPaused)
 
+            // Everything here must be able to give up width. With a fixed-width
+            // picker and an untruncatable status string, the header's demand
+            // plus the sidebar exceeded the window, and NavigationSplitView
+            // resolved that by sliding the sidebar off the left edge.
             TextField("Meeting title", text: $session.title)
                 .textFieldStyle(.plain)
                 .font(.title3.weight(.medium))
-                .frame(maxWidth: 360)
+                .frame(minWidth: 100, maxWidth: 360)
+                .layoutPriority(1)
 
-            Spacer()
+            Spacer(minLength: 8)
 
             if session.isRecording {
                 Picker("Template", selection: $session.templateID) {
@@ -53,13 +65,16 @@ private struct RecordingHeader: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 160)
+                .frame(minWidth: 110, idealWidth: 160, maxWidth: 160)
                 .help("How Oats should structure the finished notes")
             }
 
             Text(session.statusText)
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(session.isRecording ? .primary : .secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(-1)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
