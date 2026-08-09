@@ -1,7 +1,12 @@
 # Oats — session handoff
 
-Written 2026-08-09. Read this first when resuming; it is the full state of the
-project, including the one thing that is broken right now.
+Updated 2026-08-09 (second session). Read this first when resuming; it is the
+full state of the project.
+
+**The live loop is now clean and verified end to end.** The two bugs the last
+session left open are fixed, but not by the fixes it had written — one of those
+fixes was itself the cause of a worse failure. See "What the last session got
+wrong" below before touching capture.
 
 ## What Oats is
 
@@ -51,7 +56,7 @@ distribution and possibly for TCC behaviour in a packaged `.app`.
 │   │   ├── Enhance/        NoteEnhancer, NoteTemplate
 │   │   ├── Meeting/        Meeting, MeetingStore (Markdown + JSON on disk)
 │   │   └── MeetingRecorder.swift   orchestrates both channels
-│   ├── Sources/oats/       CLI: record / list / templates / doctor
+│   ├── Sources/oats/       CLI: record / list / templates / doctor / debug-audio
 │   └── Tests/OatsKitTests/ 16 tests, all passing
 └── spike/                  ← throwaway proof-of-concept, superseded by OatsKit
     └── AudioCaptureSpike/  AudioCaptureSpike, TranscribeSpike, EnhanceSpike
@@ -72,32 +77,71 @@ All measured on this machine, not assumed:
 - **Full CLI round trip** — `oats record` captured a simulated meeting,
   transcribed both channels live, enhanced against rough notes, and saved
   Markdown + JSON. Output is in `/tmp/oats-meetings/`.
+- **Echo dedup on a real speaker recording** — the mic's duplicate of each
+  remote sentence is removed, leaving one correctly attributed "Them" segment.
+- **Clean shutdown** — no hang at "Finishing transcription…".
 - `oats doctor` reports all four subsystems green.
 - `swift test` → **16/16 passing**.
 
-## ⚠️ Where it broke — start here
+`oats doctor` being green is necessary but **not** sufficient: it reported all
+four subsystems healthy throughout the session in which nothing was transcribed
+at all. Use `oats debug-audio` to confirm audio is actually flowing.
 
-The first successful live run exposed two real bugs. Both fixes are **written
-and compiling but NOT yet verified end to end**, because the session was paused
-mid-verification.
+## What the last session got wrong
 
-1. **Mic re-hears the speakers.** Every remote utterance was transcribed twice —
-   once correctly as "Them", once as "Me". Fixed two ways: enabled the OS
-   voice-processing unit (`setVoiceProcessingEnabled(true)`) for real echo
-   cancellation, plus `Transcript.withoutEcho()` as a dedup safety net.
-2. **The two channels had different time origins** ("Me 00:05" and "Them 00:00"
-   were the same moment). Fixed by stamping each buffer with an explicit
-   `bufferStartTime` anchored to a shared meeting origin.
+Resuming, the prescribed verification command produced **zero transcription** and
+then hung for the full 140 s. Diagnosis found three separate faults; only the
+last one was on the previous session's list.
 
-**A first attempt at fix 2 made things worse and is the reason to be careful
-here.** Stamping buffers with the wall clock at ingest time caused the analyzer
-to emit *nothing at all* and then hang forever in
-`finalizeAndFinishThroughEndOfInput()`. The current code instead anchors once to
-the shared origin and advances by real buffer durations (monotonic, exact), and
-`SpeechChannel.finish()` is now bounded by a 20 s timeout so a wedged analyzer
-can never cost the whole meeting.
+### 1. Voice processing and the process tap are mutually exclusive
 
-### The exact next command to run
+This is the important one, and it is the reverse of what the last session
+believed. `setVoiceProcessingEnabled(true)` — written as the echo fix — is what
+broke the pipeline. On macOS 26.6 it costs **both** channels:
+
+- **The tap dies.** `AudioDeviceStart` still returns `noErr` and the IOProc then
+  never fires once. Measured in the same run, back to back:
+
+  | tap | voice processing | mic format | tap callbacks |
+  |---|---|---|---|
+  | yes | **off** | 48 kHz / 1 ch | **285** |
+  | yes | **on** | 48 kHz / 7 ch | **0** |
+
+- **The mic goes silent downstream.** VPIO switches the input node to a
+  7-channel format. Channel 0 still carries real audio, but `AVAudioConverter`
+  renders that layout into the analyzer's mono format as pure digital silence
+  (-inf dBFS), so the "Me" channel transcribes nothing either.
+
+Echo cancellation is therefore **off** and must stay off while the tap runs.
+`MicrophoneCapture.start(echoCancellation:)` now defaults to `false` and carries
+the full explanation. Speaker bleed is handled downstream by
+`Transcript.withoutEcho()`, which makes that dedup a correctness requirement
+rather than a safety net. Headphones remain the real fix; a proper AEC using the
+tap signal as the echo reference is the principled long-term answer, and Oats is
+unusually well placed to do it because it already has that reference signal.
+
+### 2. `SpeechChannel.finish()` had a timeout that never fired
+
+The 20 s bound was written as a `withTaskGroup` race between the drain and a
+sleep. That cannot work: `withTaskGroup` awaits *every* child before returning,
+so when the sleep won, the group still blocked on the drain, and
+`finalizeAndFinishThroughEndOfInput()` does not honour cancellation, so
+`cancelAll()` could not free it either. The "20 s bound" was an unbounded hang.
+
+It now runs the drain **detached** and waits on a `OneShotSignal` actor that
+either the drain or the timeout resolves, whichever comes first. A wedged
+analyzer is abandoned rather than awaited. Verified: a run that previously hung
+past 140 s now exits in 20 s.
+
+### 3. The timestamps were fine
+
+`bufferStartTime` anchored to a shared origin was never the problem — the last
+session's suspicion was misdirected. Both speakers land on one timeline
+correctly (`Me 00:03` and `Them 00:03` are the same moment). No change needed.
+
+## Verified working, this session
+
+The command the last session left as "run this next" now passes:
 
 ```bash
 cd OatsKit && swift build
@@ -105,15 +149,18 @@ cd OatsKit && swift build
 timeout 140 ./.build/debug/oats record --title "Echo test" --minutes 0.28 --dir /tmp/oats-meetings
 ```
 
-Success looks like: live segments appear during recording, each remote sentence
-appears **once** and is labelled **Them**, timestamps for both speakers sit on
-one timeline, and the process exits without hanging at "Finishing
-transcription…".
+Result: live segments appear during recording, both speakers sit on one
+timeline, the saved transcript contains each remote sentence **once** labelled
+**Them** (4 raw segments → 2 after echo dedup), enhancement runs, notes are
+written, and the process exits cleanly in 20 s. `swift test` → 16/16.
 
-If it hangs again at that line, the `bufferStartTime` values are still upsetting
-the analyzer — the fastest diagnostic is to drop back to
-`AnalyzerInput(buffer:)` with no start time, confirm transcription returns, then
-reintroduce timing.
+### `oats debug-audio`
+
+Added this session. Sweeps all four tap × voice-processing combinations and
+reports mic level and tap callback count for each. Use it whenever a recording
+comes back empty: every failure mode in this pipeline returns success, so signal
+level and callback counts are the only honest evidence. It is what isolated
+fault 1 above, and it will catch a recurrence on other hardware.
 
 ## Hard-won gotchas (do not rediscover these)
 
@@ -129,8 +176,26 @@ reintroduce timing.
   then silently ignores it.
 - Every tap failure mode returns `noErr`, so **always verify with signal level
   (dBFS) and frame-continuity accounting**, never with "it didn't throw".
+- **Never enable the voice-processing unit while the tap is running.** It kills
+  the tap outright and silences the mic after conversion. Full detail above.
+- A `withTaskGroup` race is not a timeout. The group awaits all children on
+  scope exit, so racing cancellable work against `Task.sleep` only bounds
+  anything if the work actually honours cancellation. Several Speech APIs do
+  not. Detach the work and signal completion instead.
+- Tearing down a VPIO engine is **not** synchronous. Starting another audio
+  configuration too soon after it fails with `canPerformIO` (error 560227702),
+  which looks exactly like a capture regression. `debug-audio` orders its sweep
+  to avoid this rather than sleeping and hoping.
 - `readLine()` returns nil instantly when stdin is not a TTY, which silently
   ended recordings when run from a script. The CLI now checks `isatty`.
+- The `Info.plist` "unhandled file" build warning from SwiftPM is **cosmetic**.
+  The plist is embedded via `-sectcreate` linker flags and TCC reads it
+  correctly; verify with `otool -s __TEXT __info_plist ./.build/debug/oats`.
+  It was a red herring while chasing the silent-capture bug.
+- When capture misbehaves, run the `spike/AudioCaptureSpike` binary first. It is
+  a known-good reference, so it separates "the environment or permissions
+  broke" from "OatsKit regressed" in about thirty seconds. That call is what
+  turned this session's investigation around.
 - Redirected stdout is block-buffered; the CLI now calls `setvbuf(_IOLBF)` so
   live output survives a killed process.
 
@@ -146,11 +211,15 @@ no-setup option.
 
 ## Roadmap from here
 
-1. **Verify the two fixes above.** Nothing else matters until the live loop is
-   clean.
-2. Build the SwiftUI app: menu-bar presence, notepad during the meeting, live
-   transcript panel, meeting library. `OatsKit` already exposes everything it
-   needs.
+1. **Build the SwiftUI app** — this is the next real step now that the live loop
+   is clean. Menu-bar presence, notepad during the meeting, live transcript
+   panel, meeting library. `OatsKit` already exposes everything it needs.
+2. **Echo, properly.** Today's defence is transcript-level dedup, which works
+   but is downstream and lossy by nature — it can only drop whole utterances,
+   and it deliberately refuses to touch anything under four words. Since Oats
+   already captures the exact signal being played, a real AEC with the tap as
+   reference is achievable and would let "Me" survive genuine interruptions on
+   speakers. Worth a spike before the app's UX assumes headphones.
 3. EventKit calendar integration — auto-detect meeting start, use event title
    and attendees as enhancement context.
 4. Optional audio retention (something Granola cannot offer — lets users verify

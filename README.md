@@ -10,9 +10,9 @@ your own structure.
 **Nothing leaves your Mac.** No transcription service, no cloud model, no
 account. You can verify that with Little Snitch.
 
-> Status: early. The capture → transcribe → enhance pipeline works end to end
-> from the CLI; the SwiftUI app is not built yet. See [HANDOFF.md](HANDOFF.md)
-> for exactly what works and what is still broken.
+> Status: early. The capture → transcribe → enhance pipeline is verified working
+> end to end from the CLI; the SwiftUI app is not built yet. See
+> [HANDOFF.md](HANDOFF.md) for exactly what works and what is next.
 
 ## Why
 
@@ -31,7 +31,7 @@ flow — and removes the cloud entirely.
 | Concern | Mechanism |
 |---|---|
 | Hearing the far end | Core Audio process tap — reads the system's own output, so no bot joins and every meeting app works |
-| Hearing you | Separate microphone stream with OS echo cancellation |
+| Hearing you | Separate microphone stream. The OS echo canceller cannot be used — it stops the process tap dead — so speaker bleed is removed from the transcript afterwards instead |
 | Who said what | The two streams *are* the speaker labels: mic = you, tap = them. No diarization model |
 | Transcription | Apple `SpeechAnalyzer`, on-device, ~44× realtime |
 | Enhancement | Apple Foundation Models, on-device |
@@ -55,8 +55,16 @@ result to `~/Documents/Oats`.
 
 ```
 oats record [--title T] [--template ID] [--notes FILE] [--minutes N]
-oats list · oats templates · oats doctor
+oats list · oats templates · oats doctor · oats debug-audio
 ```
+
+Works on speakers or headphones. On speakers your microphone also hears the far
+end, and Oats drops those duplicates from the transcript so each remote sentence
+is attributed once — but headphones still give the cleanest result.
+
+If a recording comes back empty, run `oats debug-audio`. Every failure mode in
+the macOS audio stack here reports success, so signal levels and callback counts
+are the only reliable evidence.
 
 ## Design commitments
 

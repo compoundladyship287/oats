@@ -24,12 +24,28 @@ public final class MicrophoneCapture: @unchecked Sendable {
         AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     }
 
-    /// - Parameter echoCancellation: Enables the OS voice-processing unit, which
-    ///   subtracts the system's own output from the microphone signal. Without
-    ///   it, a user on speakers has every remote utterance transcribed twice —
-    ///   once correctly as "Them" and once, via the mic, as "Me".
+    /// - Parameter echoCancellation: Enables the OS voice-processing unit.
+    ///
+    ///   **Leave this off while the system-audio tap is running.** It is the
+    ///   obvious fix for the mic re-hearing the speakers, it was tried, and on
+    ///   macOS 26.6 it breaks the two things Oats depends on:
+    ///
+    ///   1. The process tap stops dead — `AudioDeviceStart` still returns
+    ///      `noErr` and the IOProc then never fires once (measured: 297
+    ///      callbacks with voice processing off, 0 with it on, same run).
+    ///      VPIO takes over the output path the aggregate device is built on,
+    ///      so turning it on silently costs the entire "Them" channel.
+    ///   2. The input node switches to a 7-channel format. Channel 0 still
+    ///      carries real audio, but `AVAudioConverter` renders that layout to
+    ///      the analyzer's mono format as pure digital silence, so the "Me"
+    ///      channel transcribes nothing either.
+    ///
+    ///   Echo is instead handled after the fact by `Transcript.withoutEcho()`,
+    ///   which is why that dedup is a correctness requirement and not a nicety.
+    ///   Headphones remain the real fix; a proper AEC using the tap signal as
+    ///   the reference is the principled long-term answer.
     public func start(
-        echoCancellation: Bool = true,
+        echoCancellation: Bool = false,
         handler: @escaping (AVAudioPCMBuffer) -> Void
     ) throws {
         let input = engine.inputNode

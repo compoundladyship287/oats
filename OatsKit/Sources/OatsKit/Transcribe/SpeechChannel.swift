@@ -192,22 +192,57 @@ public final class SpeechChannel: @unchecked Sendable {
         inputContinuation?.finish()
         inputContinuation = nil
 
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { [analyzer, analyzeTask, resultsTask] in
-                try? await analyzer.finalizeAndFinishThroughEndOfInput()
-                await analyzeTask?.value
-                await resultsTask?.value
-            }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-            }
-            await group.next()
-            group.cancelAll()
+        // The drain runs *detached* rather than as a child task, and the timeout
+        // is a one-shot signal rather than a racing sibling in a task group.
+        //
+        // A task group is the obvious shape here and it does not work:
+        // `withTaskGroup` awaits every child before it returns, so when the
+        // timeout child wins the race, the group still blocks on the drain child
+        // until it completes. `finalizeAndFinishThroughEndOfInput()` does not
+        // honour cancellation, so `cancelAll()` cannot free it either, and the
+        // supposed 20 s bound became an unbounded hang.
+        let done = OneShotSignal()
+        let drain = Task.detached { [analyzer, analyzeTask, resultsTask] in
+            try? await analyzer.finalizeAndFinishThroughEndOfInput()
+            await analyzeTask?.value
+            await resultsTask?.value
+            await done.signal()
         }
+        let deadline = Task.detached {
+            try? await Task.sleep(for: timeout)
+            await done.signal()
+        }
+
+        await done.wait()
+        deadline.cancel()
+        // `drain` is deliberately not awaited: if it is wedged, abandoning it is
+        // the entire point. Segments already delivered are safe in `collected`.
+        _ = drain
 
         analyzeTask?.cancel()
         resultsTask?.cancel()
         analyzeTask = nil
         resultsTask = nil
+    }
+}
+
+/// Resumes every waiter the first time it is signalled, and ignores signals
+/// after that. Used to put a genuine upper bound on work that cannot be
+/// cancelled.
+private actor OneShotSignal {
+    private var fired = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func signal() {
+        guard !fired else { return }
+        fired = true
+        let pending = waiters
+        waiters = []
+        for continuation in pending { continuation.resume() }
+    }
+
+    func wait() async {
+        if fired { return }
+        await withCheckedContinuation { waiters.append($0) }
     }
 }

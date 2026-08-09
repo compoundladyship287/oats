@@ -68,6 +68,9 @@ public final class MeetingRecorder: @unchecked Sendable {
         state = .recording
 
         if microphoneAvailable, let channel = microphoneChannel {
+            // Echo cancellation stays off: the OS voice-processing unit cannot
+            // coexist with the process tap. See `MicrophoneCapture.start`.
+            // Speaker bleed is removed downstream by `Transcript.withoutEcho()`.
             try microphone.start { buffer in channel.ingest(buffer) }
         }
         if let channel = systemChannel {

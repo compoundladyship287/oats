@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import OatsKit
 
@@ -48,6 +49,7 @@ func printUsage() {
           oats list [--dir PATH]
           oats templates
           oats doctor
+          oats debug-audio
 
         RECORD
           Captures system audio and your microphone, transcribes both live on-device,
@@ -59,6 +61,11 @@ func printUsage() {
 
         TEMPLATES
           \(NoteTemplate.builtIns.map(\.id).joined(separator: ", "))
+
+        DEBUG-AUDIO
+          Measures mic level and tap callbacks in every capture configuration.
+          Use it when a recording comes back empty: every failure mode in this
+          pipeline returns success, so only levels and callback counts tell you.
         """)
 }
 
@@ -211,6 +218,92 @@ func waitForStop(minutes: Double?) async {
     }
 }
 
+/// Measures both capture paths in all four tap × voice-processing combinations.
+///
+/// Worth keeping as a command because every way this pipeline fails returns
+/// `noErr`: a dead tap and a healthy one are distinguishable only by callback
+/// count, and a muted mic only by signal level. Play audio while it runs.
+///
+/// On macOS 26.6 this is what shows that voice processing and the process tap
+/// are mutually exclusive — the `tapCallbacks` column goes to zero the moment
+/// voice processing is on.
+@available(macOS 26.0, *)
+func runDebugAudio() async {
+    _ = await MicrophoneCapture.requestAccess()
+    print("Play audio and talk while this runs; each row samples 3 seconds.")
+    print(String(repeating: "─", count: 78))
+
+    // Voice-processing rows run last on purpose. A VPIO engine keeps the audio
+    // HAL busy well after `stop()` returns, and a following configuration then
+    // fails to start with `canPerformIO` — which looks exactly like the capture
+    // regression this command exists to detect. Ordering sidesteps the race
+    // instead of guessing at a sleep long enough to hide it.
+    let combinations = [(false, false), (true, false), (false, true), (true, true)]
+
+    for (withTap, voiceProcessing) in combinations {
+        let tap = SystemAudioTap()
+        if withTap {
+            do { try tap.prepare() } catch {
+                print("tap prepare failed: \(error)")
+                continue
+            }
+        }
+
+        let microphone = MicrophoneCapture()
+        let peak = PeakMeter()
+        do {
+            try microphone.start(echoCancellation: voiceProcessing) { buffer in
+                peak.accumulate(buffer)
+            }
+        } catch {
+            print("mic start failed: \(error)")
+            tap.stop()
+            continue
+        }
+        if withTap { try? tap.start { _ in } }
+
+        try? await Task.sleep(for: .seconds(3))
+
+        let format = microphone.format
+        print(
+            "tap=\(withTap ? "yes" : "no ")  voiceProcessing=\(voiceProcessing ? "on " : "off")"
+                + "  mic=\(format.map { "\(Int($0.sampleRate))Hz/\($0.channelCount)ch" } ?? "nil")"
+                + "  vpActive=\(microphone.voiceProcessingEnabled)"
+                + "  micPeak=\(peak.description)"
+                + "  tapCallbacks=\(tap.callbackCount)")
+
+        microphone.stop()
+        tap.stop()
+        try? await Task.sleep(for: .seconds(2))
+    }
+    print(String(repeating: "─", count: 78))
+    print("Expected: tapCallbacks > 0 and micPeak well above -60 dBFS only when")
+    print("voice processing is off. Anything else is a capture regression.")
+}
+
+/// Peak level across the first channel. Written to from the audio thread.
+final class PeakMeter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var peak: Float = 0
+
+    func accumulate(_ buffer: AVAudioPCMBuffer) {
+        guard let data = buffer.floatChannelData else { return }
+        var local: Float = 0
+        for frame in 0..<Int(buffer.frameLength) {
+            local = max(local, abs(data[0][frame]))
+        }
+        lock.lock()
+        peak = max(peak, local)
+        lock.unlock()
+    }
+
+    var description: String {
+        lock.lock()
+        defer { lock.unlock() }
+        return peak > 0 ? String(format: "%.1f dBFS", 20 * log10(peak)) : "SILENT"
+    }
+}
+
 func defaultTitle() -> String {
     let formatter = DateFormatter()
     formatter.dateFormat = "EEEE HH:mm"
@@ -256,6 +349,7 @@ do {
     case "record": try await runRecord(arguments)
     case "list": try runList(arguments)
     case "doctor": await runDoctor()
+    case "debug-audio": await runDebugAudio()
     case "templates":
         for template in NoteTemplate.builtIns {
             print("\(template.id.padding(toLength: 16, withPad: " ", startingAt: 0))\(template.name)")
