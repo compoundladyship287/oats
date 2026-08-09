@@ -16,6 +16,20 @@ public struct NoteEnhancer: Sendable {
     private static let singlePassWordLimit = 1_500
     private static let chunkWordLimit = 1_200
 
+    /// Below this many transcribed words, Oats refuses to write notes at all.
+    ///
+    /// Prompting alone cannot hold this line. Asked to produce meeting notes
+    /// from "let's talk about the OKRs", the model does not decline — it reports
+    /// that the team discussed and finalised the OKRs, because that is what
+    /// notes from such a meeting would plausibly look like. The failure is worse
+    /// than an empty result: it is confident, well-formatted, and wrong about
+    /// what a real meeting concluded.
+    ///
+    /// So the floor is enforced in code, before the model is ever called. A
+    /// genuine minute of conversation runs to a couple of hundred words; this
+    /// only catches meetings where essentially nothing was captured.
+    public static let minimumTranscriptWords = 40
+
     public enum Availability: Sendable, Equatable {
         case available
         case unavailable(String)
@@ -45,6 +59,13 @@ public struct NoteEnhancer: Sendable {
             throw CaptureError.message("Nothing was transcribed, so there is nothing to enhance")
         }
 
+        let spokenWords = Self.spokenWordCount(transcript)
+        guard spokenWords >= Self.minimumTranscriptWords else {
+            throw CaptureError.message(
+                "Only \(spokenWords) \(spokenWords == 1 ? "word was" : "words were") transcribed — "
+                    + "too little to write up without inventing the rest")
+        }
+
         let source =
             wordCount(text) > Self.singlePassWordLimit
             ? try await condense(text)
@@ -67,23 +88,39 @@ public struct NoteEnhancer: Sendable {
         You turn a person's rough meeting notes into polished notes, using the \
         meeting transcript as evidence.
 
+        You are reporting a meeting that happened, not composing a plausible one. \
+        The transcript is your only source of fact. Everything you write must be \
+        traceable to a specific line in it.
+
         Rules:
         - The user's notes are the outline. Keep their headings, their order, and \
         their emphasis. Never reorganize into your own structure.
         - Expand each fragment with specifics from the transcript: numbers, names, \
         dates, owners, and decisions. Prefer the speakers' own words.
-        - Where the user wrote a question, answer it if the transcript answers it.
+        - Where the user wrote a question, answer it only if the transcript \
+        answers it. Otherwise leave the question standing.
         - Record every decision explicitly stated, including any condition or \
         threshold attached to it.
-        - Never invent anything the transcript does not support. If the user noted \
-        something the transcript never covers, keep their line unchanged.
+        - Naming a topic is not discussing it. If a speaker says "let's talk \
+        about the OKRs" and the transcript ends there, the OKRs were *raised* and \
+        nothing more. Never write that something was discussed, reviewed, agreed, \
+        finalised, or assigned unless the transcript shows it actually happening.
+        - Never invent owners, dates, numbers, or outcomes, and never emit \
+        placeholders like "[Owner Name]" or "TBD". If nobody was named, say \
+        nothing about ownership.
+        - Omit any section you have no evidence for. Leaving a section out is \
+        always better than filling it with a guess.
+        - Let the length follow the evidence. Two sentences of transcript support \
+        two sentences of notes. Do not pad.
+        - If the user noted something the transcript never covers, keep their line \
+        unchanged rather than elaborating on it.
         - Be terse and factual. No preamble and no "in this meeting" framing.
         - Output Markdown, starting directly with the first heading.
 
         For a meeting of this type: \(template.guidance)
-        If the user's notes imply no structure, fall back to these sections: \
+        If the user's notes imply no structure, you may draw on these sections, \
+        using only the ones the transcript supports: \
         \(template.sections.joined(separator: ", ")).
-        Always end with an "Action items" section listing owners where stated.
         """
     }
 
@@ -163,5 +200,14 @@ public struct NoteEnhancer: Sendable {
 
     private func wordCount(_ text: String) -> Int {
         text.split(whereSeparator: { $0 == " " || $0 == "\n" }).count
+    }
+
+    /// Words actually spoken, excluding the `[Me]` / `[Them]` labels that
+    /// `Transcript.formatted()` adds — counting those would let a handful of
+    /// one-word segments clear the floor on labels alone.
+    public static func spokenWordCount(_ transcript: Transcript) -> Int {
+        transcript.segments.reduce(0) { total, segment in
+            total + segment.text.split(whereSeparator: { $0 == " " || $0 == "\n" }).count
+        }
     }
 }

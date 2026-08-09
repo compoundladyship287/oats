@@ -221,6 +221,14 @@ action item. Its 4,096-token window also covers prompt *and* completion, so
 (Qwen3-8B class via llama.cpp) should remain the quality default; this is the
 no-setup option.
 
+It is also **eager to please**, which is the more dangerous failure. Given thin
+evidence it does not say "not enough to go on" — it produces confident,
+well-formatted notes about a meeting that did not happen. Treat any instruction
+of the form "only write what is supported" as a mitigation, never a guarantee,
+and put a hard floor in code wherever an empty answer is the correct one. See
+the fabrication section below. This is the main reason to keep the transcript
+tab in the app: it is the receipt for every claim in the notes.
+
 ## The SwiftUI app
 
 `OatsApp/` — built this session and verified running the full loop on real
@@ -296,6 +304,41 @@ dBFS**. The distributions overlap, so no threshold, adaptive or otherwise,
 separates them. The discrimination has to be acoustic. An adaptive-floor gate
 was written, tuned, tested, and deleted once `SpeechDetector` was found; the
 commit history has it if the reasoning is ever needed again.
+
+### The enhancer fabricates meetings, and prompting alone will not stop it
+
+Reported from a real test: the user said "let's talk about the OKRs" and
+stopped. The notes claimed the team had **discussed and finalised** the OKRs.
+
+This is a *separate* failure from the mic hallucination above — the transcript
+was accurate. The enhancement model invented the meeting. Two causes:
+
+1. **The prompt demanded structure the evidence could not fill.** It said
+   "Never invent anything the transcript does not support" and, four lines
+   later, "Always end with an 'Action items' section" plus a fallback list of
+   sections to produce. Given a six-word transcript, the model has to fill
+   `Discussion` / `Decisions` / `Action items`, so it writes what notes from
+   such a meeting would plausibly say. The same pressure produced
+   "**Owner:** [Owner Name]" and an invented deadline in earlier tests.
+2. **There was no floor on how little transcript is enough.**
+
+Both are fixed. The instructions now state that naming a topic is not
+discussing it, forbid asserting anything was discussed / decided / agreed /
+finalised / assigned without evidence, ban placeholder owners, require omitting
+unsupported sections, and tell the model to let length follow the evidence.
+
+More importantly, **the floor is enforced in code, not in the prompt**
+(`NoteEnhancer.minimumTranscriptWords`, 40 spoken words). Asked to write notes
+from almost nothing, the model does not decline — it writes plausible ones, and
+a confident well-formatted invention is worse than no notes at all. That is not
+something a wording change can be trusted to hold, so the model is never called
+below the floor. The count excludes the `[Me]` / `[Them]` labels, or a handful
+of one-word segments would clear it on labels alone.
+
+Verified: the reported case now saves as "transcript only" and says why. A
+mid-length transcript where a topic is raised and explicitly deferred now yields
+"OKRs deferred … Priya owns the retention target … come back to this on
+Thursday" — all of it traceable to the transcript, no invented decisions.
 
 ## Roadmap from here
 

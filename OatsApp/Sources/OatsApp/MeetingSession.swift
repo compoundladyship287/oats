@@ -124,9 +124,17 @@ final class MeetingSession {
         // Never skip this silently. A meeting that comes back as "transcript
         // only" with no explanation looks like the app quietly did half its job,
         // and the reason is exactly what the user needs to fix it.
+        let spokenWords = NoteEnhancer.spokenWordCount(transcript)
         switch NoteEnhancer.availability {
         case .available where transcript.isEmpty:
             break
+        case _ where spokenWords < NoteEnhancer.minimumTranscriptWords:
+            // Deliberate refusal rather than a failure: writing notes from this
+            // little means inventing what the meeting concluded.
+            errorMessage =
+                "Only \(spokenWords) \(spokenWords == 1 ? "word was" : "words were") "
+                + "transcribed — too little to write up without inventing the rest.\n\n"
+                + "Your transcript and notes are saved."
         case .available:
             phase = .enhancing
             do {

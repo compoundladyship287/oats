@@ -157,9 +157,16 @@ func runRecord(_ arguments: Arguments) async throws {
         transcript: transcript,
         templateID: arguments.template)
 
-    print("Enhancing \(transcript.segments.count) segments with your notes…")
+    let spokenWords = NoteEnhancer.spokenWordCount(transcript)
     switch NoteEnhancer.availability {
+    case _ where spokenWords < NoteEnhancer.minimumTranscriptWords:
+        // A refusal, not a failure. Writing notes from this little means
+        // inventing the meeting, which is the one thing Oats must not do.
+        print(
+            "Only \(spokenWords) words were transcribed — too little to write up "
+                + "without inventing the rest. Saving the transcript and your notes.")
     case .available:
+        print("Enhancing \(transcript.segments.count) segments with your notes…")
         do {
             meeting.enhancedNotes = try await NoteEnhancer().enhance(
                 roughNotes: roughNotes,
