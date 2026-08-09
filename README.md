@@ -19,6 +19,12 @@ account. You can verify that with Little Snitch.
 > menu bar, type into the notepad, watch the live transcript, get written-up
 > notes on stop. Rough edges remain — see [HANDOFF.md](HANDOFF.md).
 
+[![Watch the 40s demo](docs/images/demo-thumbnail.png)](https://github.com/yuvrajadhikari/oats/releases/download/v0.5.2/oats-demo.mp4)
+
+*Real footage, real on-device transcription — click to watch (40s, ~20MB).
+Built from a scripted screen recording of the actual app; see
+[`media/`](media/) to reproduce or re-cut it.*
+
 ## Why
 
 Granola is a genuinely good product, but only its audio capture is local: your
