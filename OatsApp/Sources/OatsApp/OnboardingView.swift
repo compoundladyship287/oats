@@ -14,7 +14,6 @@ struct OnboardingView: View {
     @Environment(AppSettings.self) private var settings
     @State private var step = 0
     @State private var checks: [SystemCheck] = []
-    @State private var requesting = false
 
     private let lastStep = 2
 
@@ -104,34 +103,19 @@ struct OnboardingView: View {
                 .foregroundStyle(.secondary)
             }
 
-            VStack(spacing: 10) {
-                ForEach(checks) { check in
-                    CheckRow(check: check)
-                }
-            }
+            PermissionsList(checks: checks) { await refresh() }
 
             if checks.contains(where: { !$0.isReady }) {
-                Button {
-                    Task { await request() }
-                } label: {
-                    if requesting {
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small)
-                            Text("Asking…")
-                        }
-                    } else {
-                        Text("Grant Access")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(requesting)
-
+                // No bulk "Grant everything" button: each row already offers the
+                // right action for its own state, which a single button cannot,
+                // since a denied permission can only be fixed in System Settings.
                 Text(
-                    "macOS will ask once for each. If you have already said no, the "
-                        + "switches live in System Settings → Privacy & Security."
+                    "macOS asks once for each. You can continue without them and "
+                        + "grant them later — Oats will keep telling you what is missing."
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
@@ -203,15 +187,6 @@ struct OnboardingView: View {
         checks = await Diagnostics.all()
     }
 
-    /// Touching each subsystem is what raises its prompt; there is no API to ask
-    /// for system-audio access other than trying to build the tap.
-    private func request() async {
-        requesting = true
-        _ = await MicrophoneCapture.requestAccess()
-        _ = Diagnostics.systemAudio()
-        await refresh()
-        requesting = false
-    }
 }
 
 // MARK: - Pieces
@@ -233,41 +208,6 @@ private struct Promise: View {
                 .multilineTextAlignment(.center)
         }
         .frame(width: 130)
-    }
-}
-
-private struct CheckRow: View {
-    let check: SystemCheck
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: check.isReady ? "checkmark.circle.fill" : "circle.dashed")
-                .foregroundStyle(check.isReady ? Color.green : .secondary)
-                .font(.title3)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(check.name).font(.callout.weight(.medium))
-                    Text(check.detail)
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                if case .actionNeeded(let why) = check.state {
-                    Text(why)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if case .unavailable(let why) = check.state {
-                    Text(why)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            Spacer()
-        }
-        .padding(12)
-        .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 

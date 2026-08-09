@@ -24,6 +24,15 @@ public final class MicrophoneCapture: @unchecked Sendable {
         AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     }
 
+    /// Whether macOS will still show a prompt.
+    ///
+    /// Matters for what the UI can offer: once denied, an app cannot ask again,
+    /// and a "Grant" button that silently does nothing is worse than no button.
+    /// The only route back is System Settings.
+    public static var canRequestAccess: Bool {
+        AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined
+    }
+
     /// - Parameter echoCancellation: Enables the OS voice-processing unit.
     ///
     ///   **Leave this off while the system-audio tap is running.** It is the

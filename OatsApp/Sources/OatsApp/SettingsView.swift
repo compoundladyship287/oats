@@ -7,6 +7,8 @@ struct SettingsView: View {
         TabView {
             GeneralSettings()
                 .tabItem { Label("General", systemImage: "gearshape") }
+            PermissionsSettings()
+                .tabItem { Label("Permissions", systemImage: "lock.shield") }
             NotesSettings()
                 .tabItem { Label("Notes", systemImage: "text.alignleft") }
             AboutSettings()
@@ -84,6 +86,51 @@ private struct GeneralSettings: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         settings.storagePath = url.path
         library.reload()
+    }
+}
+
+/// The tab that was missing: the home screen said the microphone was blocked and
+/// pointed here, and here had nothing to say about it.
+private struct PermissionsSettings: View {
+    @State private var checks: [SystemCheck] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(
+                "Oats hears a meeting through two separate streams — your microphone "
+                    + "and the audio your Mac plays. That separation is what labels who "
+                    + "said what."
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+            PermissionsList(checks: checks) { await load() }
+
+            HStack {
+                Button("Re-check") { Task { await load() } }
+                    .controlSize(.small)
+                Spacer()
+                Text("Everything runs on this Mac. Nothing is uploaded.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+        .task { await load() }
+        // macOS grants take effect while the app is open, so a user who fixes
+        // something in System Settings and comes back should see it immediately.
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            Task { await load() }
+        }
+    }
+
+    private func load() async {
+        checks = await Diagnostics.all()
     }
 }
 

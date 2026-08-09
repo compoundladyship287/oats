@@ -49,7 +49,7 @@ struct HomeView: View {
                 .padding(.top, 36)
 
                 if !checks.isEmpty {
-                    ReadinessRow(checks: checks)
+                    ReadinessRow(checks: checks) { checks = await Diagnostics.all() }
                         .frame(maxWidth: 560)
                 }
 
@@ -65,46 +65,36 @@ struct HomeView: View {
             .padding(.horizontal, 32)
         }
         .task { checks = await Diagnostics.all() }
+        // Coming back from System Settings should reflect what changed there.
+        .onReceive(
+            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+        ) { _ in
+            Task { checks = await Diagnostics.all() }
+        }
     }
 }
 
 private struct ReadinessRow: View {
     let checks: [SystemCheck]
+    let refresh: () async -> Void
 
     private var problems: [SystemCheck] { checks.filter { !$0.isReady } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if problems.isEmpty {
-                Label("Ready to record", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.callout.weight(.medium))
-            } else {
-                // Named individually rather than a generic "setup incomplete",
-                // because which one is missing changes what the user loses.
-                ForEach(problems) { problem in
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(problem.name).font(.callout.weight(.medium))
-                            if case .actionNeeded(let why) = problem.state {
-                                Text(why)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                        Spacer()
-                        SettingsLink { Text("Settings") }
-                            .buttonStyle(.link)
-                    }
-                }
-            }
+        if problems.isEmpty {
+            Label("Ready to record", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.callout.weight(.medium))
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
+        } else {
+            // Each problem is named individually and carries its own fix, because
+            // which one is missing changes what the user loses — and because the
+            // previous version pointed at Oats' Settings, which had nothing to
+            // say about permissions. A warning must lead somewhere that helps.
+            PermissionsList(checks: problems, refresh: refresh)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.2), in: RoundedRectangle(cornerRadius: 12))
     }
 }
 

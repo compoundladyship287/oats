@@ -16,6 +16,20 @@ public struct SystemCheck: Sendable, Identifiable, Equatable {
     public let state: State
     /// What is true right now, shown next to the name.
     public let detail: String
+    /// Whether macOS will still show a prompt for this. False once denied —
+    /// at which point the only route is System Settings, and offering a button
+    /// that silently does nothing is worse than offering none.
+    public let canRequest: Bool
+
+    public init(
+        id: String, name: String, state: State, detail: String, canRequest: Bool = false
+    ) {
+        self.id = id
+        self.name = name
+        self.state = state
+        self.detail = detail
+        self.canRequest = canRequest
+    }
 
     public var isReady: Bool { state == .ready }
 }
@@ -29,13 +43,19 @@ public struct SystemCheck: Sendable, Identifiable, Equatable {
 public enum Diagnostics {
     public static func microphone() -> SystemCheck {
         let granted = MicrophoneCapture.hasAccess
+        let canAsk = MicrophoneCapture.canRequestAccess
         return SystemCheck(
             id: "microphone",
             name: "Microphone",
             state: granted
                 ? .ready
-                : .actionNeeded("Oats needs the microphone to hear your side of the call."),
-            detail: granted ? "Granted" : "Not granted")
+                : .actionNeeded(
+                    canAsk
+                        ? "Oats needs the microphone to hear your side of the call."
+                        : "Microphone access was declined. Turn it on in System Settings → "
+                            + "Privacy & Security → Microphone."),
+            detail: granted ? "Granted" : (canAsk ? "Not asked yet" : "Denied"),
+            canRequest: canAsk)
     }
 
     public static func speech() async -> SystemCheck {
@@ -87,7 +107,10 @@ public enum Diagnostics {
                 state: .actionNeeded(
                     "Oats needs to hear what your Mac is playing — that is the other "
                         + "side of the call."),
-                detail: "Not available")
+                detail: "Not available",
+                // There is no separate request API: building the tap is the ask,
+                // so retrying is always worth offering.
+                canRequest: true)
         }
     }
 
