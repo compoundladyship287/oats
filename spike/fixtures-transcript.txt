@@ -1,0 +1,16 @@
+[Them] Okay so before we get into the roadmap, did we ever resolve the onboarding drop-off thing?
+[Me] Not fully. We know it's step three, the workspace invite screen. About forty percent bail there.
+[Them] Forty percent is brutal. Do we know why?
+[Me] Two theories. Either people don't have teammates to invite yet, or the screen reads as mandatory when it isn't.
+[Them] I'd bet on the second one. There's no visible skip affordance, right?
+[Me] Right, the skip is a text link at the bottom in grey. Easy to miss.
+[Them] Let's just make skip a real button. That's a one-day change. Can you get Priya on it this week?
+[Me] Yeah I'll ask her Monday. If it works we should see step three completion go up within a week of shipping.
+[Them] Good. Now the roadmap. I want to talk about whether we do the mobile app in Q3 or push it.
+[Me] My honest read is we push it. We don't have the retention numbers to justify a second platform yet.
+[Them] What would change your mind?
+[Me] If weekly active retention at week four gets above thirty percent. We're at twenty-two right now.
+[Them] Okay. Let's revisit at the end of Q2 with that number as the gate. Write that down as the decision.
+[Me] Done. And the pricing experiment?
+[Them] Push to Q3. I don't want two big changes in flight at once. Also, can you send me the retention dashboard link after this?
+[Me] Sure, I'll send it today.

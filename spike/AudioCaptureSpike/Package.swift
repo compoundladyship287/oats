@@ -28,5 +28,10 @@ let package = Package(
             path: "Sources/TranscribeSpike",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .executableTarget(
+            name: "EnhanceSpike",
+            path: "Sources/EnhanceSpike",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
     ]
 )
