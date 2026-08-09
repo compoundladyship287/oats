@@ -1,8 +1,51 @@
 import OatsKit
 import SwiftUI
 
+/// Keeps auxiliary windows from outliving the main one.
+///
+/// Closing the Oats window left the Settings window floating on its own: the
+/// app was still running for the menu-bar item, so macOS kept the orphan
+/// on screen with nothing behind it. Settings is a companion to the main
+/// window, not a document, so it should not survive it.
+///
+/// Quitting is deliberately left alone. Oats lives in the menu bar, so closing
+/// the window is not the same as quitting, and terminating here would take the
+/// recorder down mid-meeting.
+final class WindowCoordinator: NSObject, NSApplicationDelegate {
+    private var observer: NSObjectProtocol?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        observer = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let closing = note.object as? NSWindow else { return }
+            // Deferred: at willClose the window still counts as open, so the
+            // "is anything left?" question can only be answered afterwards.
+            DispatchQueue.main.async { self?.closeAuxiliaryWindowsIfMainIsGone(besides: closing) }
+        }
+    }
+
+    private func closeAuxiliaryWindowsIfMainIsGone(besides closed: NSWindow) {
+        let candidates = NSApp.windows.filter {
+            $0 !== closed && $0.isVisible && $0.styleMask.contains(.titled)
+        }
+        guard !candidates.contains(where: isMain) else { return }
+        for window in candidates where !isMain(window) {
+            window.close()
+        }
+    }
+
+    /// The main window is the one the `Window(id: "main")` scene owns. Its title
+    /// is stable; the Settings window's is not — it takes the selected tab's
+    /// name, so it reads "Permissions" or "Notes" depending on where you were.
+    private func isMain(_ window: NSWindow) -> Bool {
+        window.identifier?.rawValue == "main" || window.title == "Oats"
+    }
+}
+
 @main
 struct OatsApp: App {
+    @NSApplicationDelegateAdaptor(WindowCoordinator.self) private var windowCoordinator
     @State private var settings: AppSettings
     @State private var session: MeetingSession
     @State private var library: MeetingLibrary

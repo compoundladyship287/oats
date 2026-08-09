@@ -7,7 +7,7 @@
 	<key>CFBundleName</key>
 	<string>oats</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.4.1</string>
+	<string>0.4.2</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>NSAudioCaptureUsageDescription</key>
