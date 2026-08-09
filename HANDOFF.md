@@ -45,6 +45,7 @@ distribution and possibly for TCC behaviour in a packaged `.app`.
 ```
 .
 ├── HANDOFF.md              ← this file
+├── OatsApp/                ← THE SWIFTUI APP (SwiftPM + bundle.sh)
 ├── docs/
 │   ├── m0-findings.md      ← measured results + Core Audio gotchas. Read this.
 │   └── plan.md             ← the approved plan (copied from ~/.claude/plans)
@@ -209,17 +210,85 @@ action item. Its 4,096-token window also covers prompt *and* completion, so
 (Qwen3-8B class via llama.cpp) should remain the quality default; this is the
 no-setup option.
 
+## The SwiftUI app
+
+`OatsApp/` — built this session and verified running the full loop on real
+audio. A plain SwiftPM package; `scripts/bundle.sh` wraps the binary into
+`Oats.app`, because macOS needs a bundle for the menu-bar item and TCC reads the
+usage strings from `Contents/Info.plist`. There is no Xcode project on purpose:
+`Package.swift` reviews as text and builds on a stock runner.
+
+```
+OatsApp/
+├── Package.swift
+├── Resources/Info.plist        TCC usage strings, bundle identity
+├── scripts/bundle.sh           -> build/Oats.app  (ad-hoc signed)
+└── Sources/OatsApp/
+    ├── OatsApp.swift           @main, MenuBarExtra, NavigationSplitView
+    ├── MeetingSession.swift    the only thing that touches MeetingRecorder
+    ├── RecordingView.swift     notepad | live transcript
+    ├── LibraryView.swift       meeting list + saved-meeting reader
+    └── NotesText.swift         block-level Markdown renderer
+```
+
+`MeetingSession` exists because `onSegment` fires on whatever thread the
+analyzer is on and SwiftUI needs main-actor state; keeping that hop in one place
+means no view thinks about threading. It shows the **deduplicated** transcript
+live, so the panel matches what will be saved.
+
+Verified by driving the real app: recording starts from ⇧⌘R and the menu bar,
+the notepad accepts typing while audio is captured, the transcript panel fills
+live with Me/Them labels and auto-scrolls, stopping enhances and saves, and the
+library selects the new meeting. **TCC did not re-prompt** for an ad-hoc-signed
+bundle on this machine and audio flowed — the handoff's open question about
+`.app` behaviour, at least for ad-hoc builds. Note that ad-hoc signing changes
+the code identity on every rebuild, so macOS may eventually treat a build as a
+new app and ask again.
+
+### ⚠️ The defect the app exposed: the mic channel hallucinates
+
+Running a real meeting through the UI made something obvious that short CLI
+tests hid. On the "Me" channel, `SpeechAnalyzer` invents confident sentences out
+of room noise. From one 60-second recording where nobody spoke into the mic:
+
+```
+ 0.27 me  Yeah, that's how I'm going to do.
+ 4.77 me  What?
+10.47 me  I took my dog.
+14.85 me  You're the ones four told us about.
+19.29 me  Tall back, not back, good looking, needed, say, reason.
+```
+
+26 segments, roughly 20 of them fabricated. The "Them" channel was correct
+throughout. This is not cosmetic: that text lands in the transcript, feeds the
+enhancement prompt, and produced notes about "the price of the property" for a
+meeting that had no such discussion.
+
+Why the obvious fix is not obvious: a simple level gate does not separate these.
+Measured on this machine, the mic's peak in a *quiet* room is **-23 to -32
+dBFS**, which overlaps the level of real speech. It needs an adaptive gate —
+track a running noise floor per channel, open on an RMS excursion above it with
+a hangover so speech onsets are not clipped, and keep advancing the frame
+counter for suppressed buffers so the shared timeline stays correct. Worth
+tuning against real speech rather than guessed thresholds, and worth a unit test
+with synthetic buffers.
+
+Until that lands, the app is honest but noisy: headphones and a quiet room help,
+and the transcript tab shows exactly what the model was given.
+
 ## Roadmap from here
 
-1. **Build the SwiftUI app** — this is the next real step now that the live loop
-   is clean. Menu-bar presence, notepad during the meeting, live transcript
-   panel, meeting library. `OatsKit` already exposes everything it needs.
+1. **Fix the mic hallucination above.** It is the single biggest quality problem
+   and it degrades the enhancement, which is the product's whole point.
 2. **Echo, properly.** Today's defence is transcript-level dedup, which works
    but is downstream and lossy by nature — it can only drop whole utterances,
    and it deliberately refuses to touch anything under four words. Since Oats
    already captures the exact signal being played, a real AEC with the tap as
    reference is achievable and would let "Me" survive genuine interruptions on
-   speakers. Worth a spike before the app's UX assumes headphones.
+   speakers. The adaptive gate and the AEC are the same spike, really.
+3. **App polish.** Editing a saved meeting's title, re-running enhancement with
+   a different template, deleting a meeting, and a settings pane for the storage
+   location. None are wired up yet.
 3. EventKit calendar integration — auto-detect meeting start, use event title
    and attendees as enhancement context.
 4. Optional audio retention (something Granola cannot offer — lets users verify

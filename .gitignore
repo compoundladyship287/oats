@@ -1,5 +1,7 @@
 .DS_Store
 .build/
+build/
+*.png
 *.xcuserstate
 xcuserdata/
 node_modules/

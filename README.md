@@ -10,9 +10,10 @@ your own structure.
 **Nothing leaves your Mac.** No transcription service, no cloud model, no
 account. You can verify that with Little Snitch.
 
-> Status: early. The capture → transcribe → enhance pipeline is verified working
-> end to end from the CLI; the SwiftUI app is not built yet. See
-> [HANDOFF.md](HANDOFF.md) for exactly what works and what is next.
+> Status: early but usable. The capture → transcribe → enhance pipeline is
+> verified end to end, and the SwiftUI app runs the whole loop: record from the
+> menu bar, type into the notepad, watch the live transcript, get written-up
+> notes on stop. Rough edges remain — see [HANDOFF.md](HANDOFF.md).
 
 ## Why
 
@@ -41,6 +42,18 @@ Requires macOS 26 or newer (that is where the on-device speech and language
 models live) on Apple Silicon.
 
 ## Try it
+
+The app:
+
+```bash
+cd OatsApp
+./scripts/bundle.sh debug --run     # builds Oats.app and launches it
+```
+
+Press Record (or ⇧⌘R, or the menu-bar item), type rough notes while you talk,
+and press it again to stop. Oats writes the notes to `~/Documents/Oats`.
+
+Or the CLI, which runs the same engine:
 
 ```bash
 cd OatsKit
@@ -80,6 +93,8 @@ negotiable:
 
 ## Repository
 
+- `OatsApp/` — the SwiftUI app. A plain SwiftPM package plus `scripts/bundle.sh`,
+  which wraps the binary into `Oats.app`; no Xcode project to keep in sync.
 - `OatsKit/` — the engine (capture, transcribe, enhance, storage) plus the CLI.
   Zero dependencies, deliberately usable on its own.
 - `docs/m0-findings.md` — measured results and the Core Audio traps found the

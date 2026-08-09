@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>Oats</string>
+	<key>CFBundleDisplayName</key>
+	<string>Oats</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.oats.Oats</string>
+	<key>CFBundleExecutable</key>
+	<string>Oats</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Oats records system audio so it can transcribe your meetings entirely on this Mac.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Oats records your microphone so it can transcribe your side of the meeting entirely on this Mac.</string>
+</dict>
+</plist>

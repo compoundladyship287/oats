@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#
+# Wraps the SwiftPM executable into Oats.app.
+#
+# A bundle is not cosmetic here. macOS needs one for the menu-bar item and the
+# app lifecycle, and TCC reads the microphone and audio-capture usage strings
+# from Contents/Info.plist — a bare executable gets a permission dialog with no
+# explanation, or none at all.
+#
+#   ./scripts/bundle.sh            # debug
+#   ./scripts/bundle.sh release
+#   ./scripts/bundle.sh release --run
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+CONFIGURATION="debug"
+RUN=false
+for argument in "$@"; do
+    case "$argument" in
+        debug|release) CONFIGURATION="$argument" ;;
+        --run) RUN=true ;;
+        *) echo "usage: bundle.sh [debug|release] [--run]" >&2; exit 2 ;;
+    esac
+done
+
+swift build -c "$CONFIGURATION"
+BINARY="$(swift build -c "$CONFIGURATION" --show-bin-path)/OatsApp"
+
+APP="build/Oats.app"
+rm -rf "$APP"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+
+# CFBundleExecutable is "Oats", so the binary is renamed rather than symlinked.
+cp "$BINARY" "$APP/Contents/MacOS/Oats"
+cp Resources/Info.plist "$APP/Contents/Info.plist"
+printf 'APPL????' > "$APP/Contents/PkgInfo"
+
+# Ad-hoc signature. There is no Developer ID on this machine yet, and an
+# unsigned bundle is treated with more suspicion by TCC than an ad-hoc one.
+#
+# Caveat worth knowing before you debug a permission that "randomly" reset:
+# ad-hoc signing means the code identity changes on every rebuild, so macOS can
+# treat each build as a new app and ask for microphone access again. That is a
+# property of unsigned development builds, not a bug in Oats.
+codesign --force --sign - --identifier app.oats.Oats "$APP" >/dev/null 2>&1 \
+    || echo "warning: ad-hoc codesign failed; the app will still run but TCC may re-prompt"
+
+echo "built $APP ($CONFIGURATION)"
+
+if [ "$RUN" = true ]; then
+    # `open` so it launches as a real bundled app with a menu bar, rather than
+    # as a child of this shell.
+    open "$APP"
+fi
