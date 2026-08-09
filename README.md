@@ -105,6 +105,12 @@ the notes to `~/Documents/Oats`.
 
 ## What it does
 
+- **A first run that sets you up** — what Oats is, the permissions it needs and
+  why, and where notes go. The permissions are unusual and failure is silent, so
+  asking up front beats a transcript that mysteriously has only one voice in it.
+- **A home screen** that tells you the machine is actually ready to record, and
+  says which permission is missing when it is not.
+
 - **Record from the menu bar** — ⌘N to start a named meeting, ⇧⌘R to stop,
   ⇧⌘P to pause. Pausing keeps the transcript continuous rather than leaving a
   gap the length of your coffee break.

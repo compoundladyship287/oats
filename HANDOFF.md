@@ -368,6 +368,36 @@ across the gap, and `recordedDuration` excludes the pause. Verified end to end:
 a sentence spoken while paused does not reach the transcript, and a 71-second
 wall-clock meeting with a pause recorded 62 seconds.
 
+### Onboarding and the home screen
+
+`Diagnostics` in OatsKit is the one place that reports subsystem readiness;
+`oats doctor`, the onboarding permission step, and the home screen all read from
+it. Duplicating those checks is how you end up with an app claiming everything
+is fine while the CLI says a permission is missing.
+
+Onboarding exists because the permissions are unusual and failure is silent.
+Oats needs **system audio**, which almost nothing else asks for, and there is no
+API to request it — building the tap is the request, which is why
+`Diagnostics.systemAudio()` doubles as the prompt. A user who dismisses that
+during a real meeting gets a transcript with only their own voice and no
+explanation.
+
+There is a **third** prompt, for the Documents folder, raised the first time
+Oats reads its own notes. It is called out on the last onboarding step, because
+unannounced it reads as the app reaching somewhere it should not.
+
+The home screen replaced a bare "No meeting selected". Its readiness row is the
+part that earns its place: it caught a microphone permission reset by a rebuild
+during testing, which every previous build would have surfaced only as a
+half-empty transcript after a real meeting.
+
+Two SwiftUI traps hit while building it, both the same shape — views that share
+identity are not replaced, they are blended:
+- A `switch` over a step index needs `.id(step)`, or the previous step stays
+  painted underneath at partial opacity.
+- `TabView` lays out every tab, so unconstrained text in a hidden tab paints
+  fragments over the visible one.
+
 ### Resuming a meeting
 
 Recording used to be global: a saved meeting was a dead end, so a call that

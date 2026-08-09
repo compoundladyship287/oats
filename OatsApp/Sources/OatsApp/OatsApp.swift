@@ -16,12 +16,17 @@ struct OatsApp: App {
 
     var body: some Scene {
         Window("Oats", id: "main") {
-            RootView()
-                .environment(settings)
-                .environment(session)
-                .environment(library)
-                .frame(minWidth: 860, minHeight: 540)
-                .preferredColorScheme(settings.appearance.colorScheme)
+            Group {
+                if settings.hasCompletedOnboarding {
+                    RootView().frame(minWidth: 860, minHeight: 540)
+                } else {
+                    OnboardingView()
+                }
+            }
+            .environment(settings)
+            .environment(session)
+            .environment(library)
+            .preferredColorScheme(settings.appearance.colorScheme)
         }
         .defaultSize(width: 1040, height: 660)
         .commands {
@@ -131,10 +136,13 @@ struct RootView: View {
             } else if let meeting = library.meetings.first(where: { $0.id == selection }) {
                 MeetingDetailView(meeting: meeting)
             } else {
-                EmptyStateView { showingNewMeeting = true }
+                HomeView(newMeeting: { showingNewMeeting = true }, selection: $selection)
             }
         }
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                HomeButton(selection: $selection)
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 if session.isRecording {
                     Button {
@@ -281,23 +289,16 @@ private struct NewMeetingSheet: View {
     }
 }
 
-struct EmptyStateView: View {
-    let newMeeting: () -> Void
+/// Returns to the home screen by clearing the selection — a "home" affordance,
+/// since a sidebar list has no natural way back to nothing-selected.
+struct HomeButton: View {
+    @Binding var selection: Meeting.ID?
 
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "circle.dotted")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(.tertiary)
-            Text("No meeting selected")
-                .font(.title3)
-            Text("Press Record when your call starts, then type rough notes.\nOats keeps your structure and fills in the specifics.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button("New Meeting…", action: newMeeting)
-                .padding(.top, 4)
+        Button { selection = nil } label: {
+            Label("Home", systemImage: "house")
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .disabled(selection == nil)
+        .help("Back to the home screen")
     }
 }

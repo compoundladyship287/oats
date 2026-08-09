@@ -38,6 +38,7 @@ final class AppSettings {
         static let defaultTemplate = "defaultTemplateID"
         static let storagePath = "storagePath"
         static let showTranscriptWhileRecording = "showTranscriptWhileRecording"
+        static let completedOnboarding = "hasCompletedOnboarding"
     }
 
     private let defaults: UserDefaults
@@ -62,6 +63,10 @@ final class AppSettings {
         didSet { defaults.set(storagePath, forKey: Key.storagePath) }
     }
 
+    var hasCompletedOnboarding: Bool {
+        didSet { defaults.set(hasCompletedOnboarding, forKey: Key.completedOnboarding) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.appearance =
@@ -71,6 +76,7 @@ final class AppSettings {
         self.storagePath = defaults.string(forKey: Key.storagePath) ?? ""
         self.showTranscriptWhileRecording =
             defaults.object(forKey: Key.showTranscriptWhileRecording) as? Bool ?? true
+        self.hasCompletedOnboarding = defaults.bool(forKey: Key.completedOnboarding)
     }
 
     var storageURL: URL {

@@ -160,6 +160,14 @@ struct LibrarySidebar: View {
                         .labelStyle(.iconOnly)
                 }
                 .help("New folder")
+
+                // ⌘, is the Mac convention and completely undiscoverable to
+                // anyone who does not already know it.
+                SettingsLink {
+                    Label("Settings", systemImage: "gearshape")
+                        .labelStyle(.iconOnly)
+                }
+                .help("Settings (⌘,)")
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 14)
