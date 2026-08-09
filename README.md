@@ -57,19 +57,51 @@ models install themselves on first use if they are not already present, and
 
 ## Install
 
-**There is no prebuilt app to download yet.** That needs an Apple Developer ID
-so the build can be signed and notarized; until then, macOS refuses downloaded
-unsigned apps and the only honest path is to build it yourself. A notarized DMG
-and a Homebrew cask are the plan.
+One command. It clones, builds, and installs both the app and the `oats` CLI:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/yuvrajadhikari/oats/main/install.sh | bash
+```
+
+Then `open -a Oats`, or run `oats doctor` to check your setup.
+
+Re-run it to update. `install.sh --uninstall` removes it, leaving your meetings
+alone.
+
+<details>
+<summary>Piping a script to bash, for a privacy tool?</summary>
+
+Fair objection. [`install.sh`](install.sh) is short and meant to be read — it
+checks your macOS version, clones this repo, runs `swift build`, and copies the
+result into `/Applications`. Nothing else. If you would rather look first:
+
+```bash
+git clone https://github.com/yuvrajadhikari/oats.git && cd oats
+less install.sh && ./install.sh
+```
+
+</details>
+
+**Why build from source rather than download an app?** Because a downloaded app
+would need an Apple Developer ID to be signed and notarized, and without one
+macOS refuses to open it — the workaround being to strip the quarantine flag off
+a binary that records your meetings, which is precisely the wrong habit to
+teach. Something you compiled yourself never gets that flag. A notarized DMG and
+a Homebrew cask are the plan once there is a Developer ID.
+
+The first build takes a minute or two. After that, press Record (or ⇧⌘R, or the
+menu-bar item), type rough notes while you talk, and press it again to stop.
+Oats writes the notes to `~/Documents/Oats`.
+
+<details>
+<summary>Building by hand instead</summary>
 
 ```bash
 git clone https://github.com/yuvrajadhikari/oats.git && cd oats
 cd OatsApp && ./scripts/bundle.sh release --run
 ```
 
-That builds `Oats.app` and launches it. Press Record (or ⇧⌘R, or the menu-bar
-item), type rough notes while you talk, and press it again to stop. Oats writes
-the notes to `~/Documents/Oats`.
+</details>
 
 Or the CLI, which runs the same engine and is quicker to poke at:
 

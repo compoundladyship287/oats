@@ -34,8 +34,11 @@ however good it is otherwise.
 
 ## Getting it running
 
+If you only want to *use* Oats, the one-line installer in the README is easier.
+For development, work from a checkout:
+
 ```bash
-git clone <repo> && cd Oats
+git clone https://github.com/yuvrajadhikari/oats.git && cd oats
 
 # The app
 cd OatsApp && ./scripts/bundle.sh debug --run
