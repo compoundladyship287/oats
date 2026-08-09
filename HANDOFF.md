@@ -340,6 +340,44 @@ mid-length transcript where a topic is raised and explicitly deferred now yields
 "OKRs deferred … Priya owns the retention target … come back to this on
 Thursday" — all of it traceable to the transcript, no invented decisions.
 
+### Version, icon, and packaging
+
+`VERSION` at the repo root is the single source. `scripts/sync-version.sh`
+propagates it into both Info.plists and `--check` fails CI if either drifts —
+which is not hypothetical, they said 0.1.0 while the released tag was v0.1.1.
+The CLI and the app both read `CFBundleShortVersionString` at runtime, so
+`oats --version` and the About tab cannot disagree with the build.
+
+The icon is *generated*, by `OatsApp/scripts/make-icon.swift`, so it can be
+reviewed and adjusted in a diff instead of being an opaque binary. Four bars in
+a warm squircle; the constraint that shaped it is legibility at 16pt.
+
+`bundle.sh` strips extended attributes before signing. Without that, files that
+picked up `com.apple.provenance` make codesign reject the whole bundle with
+"resource fork, Finder information, or similar detritus not allowed", which
+names the symptom and not the cause.
+
+### Pausing
+
+`MeetingRecorder.pause()` gates ingestion; it does not stop capture. Tearing the
+tap down and rebuilding it would re-trigger the entire silent-failure surface
+and give the two channels different time origins. Because `SpeechChannel`
+advances its timeline only for buffers it actually submits, paused audio does
+not exist as far as the transcript is concerned — timestamps stay continuous
+across the gap, and `recordedDuration` excludes the pause. Verified end to end:
+a sentence spoken while paused does not reach the transcript, and a 71-second
+wall-clock meeting with a pause recorded 62 seconds.
+
+### Folders
+
+Meetings live at `base/<folder>/<meeting>`, one directory each, and
+`MeetingStore.list()` derives folder membership **from where the meeting sits on
+disk, not from the `folder` field in its JSON**. If the two disagree the
+directory wins, so dragging a meeting between folders in Finder moves it in Oats
+too. That is the "plain files, no lock-in" promise being load-bearing rather
+than decorative. Deleting a meeting uses `trashItem`, because there is no undo
+in the app and the Finder's is better than none.
+
 ### The engine seam
 
 `NoteWritingModel` (in `Enhance/NoteWritingModel.swift`) is the boundary between

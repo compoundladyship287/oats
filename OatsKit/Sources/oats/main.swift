@@ -21,6 +21,10 @@ struct Arguments {
             command = first
             rest.removeFirst()
         }
+        // `oats --version` has no subcommand, so it would otherwise fall through
+        // to the usage banner.
+        if rest.contains("--version") || rest.contains("-v") { command = "version" }
+
         var index = 0
         while index < rest.count {
             let flag = rest[index]
@@ -38,6 +42,12 @@ struct Arguments {
         }
     }
 }
+
+/// Read from the Info.plist embedded in this executable, so the CLI, the app,
+/// and the release tag all trace back to one `VERSION` file.
+let oatsVersion: String = {
+    Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+}()
 
 func printUsage() {
     print(
@@ -358,6 +368,7 @@ do {
     case "list": try runList(arguments)
     case "doctor": await runDoctor()
     case "debug-audio": await runDebugAudio()
+    case "version", "--version", "-v": print("oats \(oatsVersion)")
     case "templates":
         for template in NoteTemplate.builtIns {
             print("\(template.id.padding(toLength: 16, withPad: " ", startingAt: 0))\(template.name)")

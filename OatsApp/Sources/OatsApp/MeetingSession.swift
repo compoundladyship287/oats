@@ -17,6 +17,7 @@ final class MeetingSession {
         /// Building the tap and loading speech models — slow enough to show.
         case starting
         case recording
+        case paused
         /// Draining both transcribers. Bounded, but can take seconds.
         case finishing
         case enhancing
@@ -26,6 +27,8 @@ final class MeetingSession {
     var title: String = ""
     var roughNotes: String = ""
     var templateID: String = NoteTemplate.general.id
+    /// Folder the finished meeting is filed under, chosen before recording.
+    var folder: String?
 
     /// Echo-deduplicated, so the panel shows what will actually be saved rather
     /// than the microphone's copy of the far end.
@@ -40,20 +43,29 @@ final class MeetingSession {
     private var recorder: MeetingRecorder?
     private var startedAt = Date()
     private var ticker: Task<Void, Never>?
-    private let store: MeetingStore
+    private let settings: AppSettings
 
-    init(store: MeetingStore = MeetingStore()) {
-        self.store = store
+    init(settings: AppSettings) {
+        self.settings = settings
     }
 
+    /// Resolved each time rather than captured, so changing the storage folder
+    /// in Settings takes effect on the next meeting without a restart.
+    private var store: MeetingStore { settings.store }
+
     var isBusy: Bool { phase != .idle }
-    var isRecording: Bool { phase == .recording }
+    var isRecording: Bool { phase == .recording || phase == .paused }
+    var isPaused: Bool { phase == .paused }
+    /// True while audio is genuinely being captured, which is what the recording
+    /// dot and the menu-bar icon should reflect.
+    var isCapturing: Bool { phase == .recording }
 
     var statusText: String {
         switch phase {
         case .idle: return "Ready"
         case .starting: return "Preparing on-device models…"
         case .recording: return elapsed.clockString
+        case .paused: return "Paused · \(elapsed.clockString)"
         case .finishing: return "Finishing transcription…"
         case .enhancing: return "Writing your notes…"
         }
@@ -91,10 +103,29 @@ final class MeetingSession {
         startTicker()
     }
 
+    /// Pausing keeps the tap and the transcribers alive and simply stops feeding
+    /// them. Timestamps stay continuous across the gap, so a paused break does
+    /// not show up as dead air in the transcript.
+    func togglePause() {
+        guard let recorder else { return }
+        switch phase {
+        case .recording:
+            recorder.pause()
+            phase = .paused
+        case .paused:
+            recorder.resume()
+            phase = .recording
+        default:
+            break
+        }
+        elapsed = recorder.elapsed
+    }
+
     /// Stops capture, enhances against the rough notes, and saves.
     @discardableResult
     func stop() async -> Meeting? {
-        guard phase == .recording, let recorder else { return nil }
+        guard phase == .recording || phase == .paused, let recorder else { return nil }
+        let recordedDuration = recorder.elapsed
         phase = .finishing
         ticker?.cancel()
         ticker = nil
@@ -119,7 +150,9 @@ final class MeetingSession {
             endedAt: Date(),
             roughNotes: roughNotes,
             transcript: transcript,
-            templateID: templateID)
+            templateID: templateID,
+            folder: folder,
+            recordedDuration: recordedDuration)
 
         // Never skip this silently. A meeting that comes back as "transcript
         // only" with no explanation looks like the app quietly did half its job,
@@ -162,6 +195,8 @@ final class MeetingSession {
         phase = .idle
         roughNotes = ""
         title = ""
+        folder = nil
+        templateID = settings.defaultTemplateID
         return meeting
     }
 
@@ -186,8 +221,11 @@ final class MeetingSession {
                 try? await Task.sleep(for: .seconds(1))
                 guard let self else { return }
                 await MainActor.run {
-                    guard self.phase == .recording else { return }
-                    self.elapsed = Date().timeIntervalSince(self.startedAt)
+                    // The recorder owns elapsed time because it owns the pause
+                    // bookkeeping; computing it from `startedAt` here would count
+                    // paused minutes.
+                    guard self.phase == .recording, let recorder = self.recorder else { return }
+                    self.elapsed = recorder.elapsed
                 }
             }
         }

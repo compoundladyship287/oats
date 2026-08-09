@@ -99,9 +99,23 @@ a binary that records your meetings, which is precisely the wrong habit to
 teach. Something you compiled yourself never gets that flag. A notarized DMG and
 a Homebrew cask are the plan once there is a Developer ID.
 
-The first build takes a minute or two. After that, press Record (or ⇧⌘R, or the
-menu-bar item), type rough notes while you talk, and press it again to stop.
-Oats writes the notes to `~/Documents/Oats`.
+The first build takes a minute or two. After that, press ⌘N to name a meeting
+and start, type rough notes while you talk, and press ⇧⌘R to stop. Oats writes
+the notes to `~/Documents/Oats`.
+
+## What it does
+
+- **Record from the menu bar** — ⌘N to start a named meeting, ⇧⌘R to stop,
+  ⇧⌘P to pause. Pausing keeps the transcript continuous rather than leaving a
+  gap the length of your coffee break.
+- **A notepad and a live transcript** side by side while the meeting runs.
+- **Written-up notes on stop**, keeping your headings and filling in the
+  specifics from what was actually said.
+- **A library with folders** — group meetings, rename them, move them, or drag
+  them around in Finder and Oats follows.
+- **Copy** the notes or the transcript to the clipboard in one click.
+- **Light and dark**, following the system or pinned in Settings (⌘,), where you
+  can also move the storage folder and pick a default template.
 
 <details>
 <summary>Building by hand instead</summary>

@@ -26,6 +26,12 @@ jobs:
           xcodebuild -version
           sw_vers
 
+      # The version lived in three places and had already drifted once — the
+      # plists said 0.1.0 while the released tag was v0.1.1. Now VERSION is the
+      # source and this fails the build if a plist falls behind it.
+      - name: Version is in sync
+        run: ./scripts/sync-version.sh --check
+
       - name: Build engine and CLI
         run: swift build --package-path OatsKit
 
@@ -46,7 +52,9 @@ jobs:
           cd OatsApp
           ./scripts/bundle.sh release
           test -x build/Oats.app/Contents/MacOS/Oats
+          test -f build/Oats.app/Contents/Resources/Oats.icns
           plutil -lint build/Oats.app/Contents/Info.plist
+          codesign --verify --strict build/Oats.app
 
       # A runner has no microphone, no output device, and no Apple Intelligence,
       # so capture, transcription and enhancement cannot run here at all. This

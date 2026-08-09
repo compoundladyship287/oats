@@ -6,10 +6,10 @@
 	<string>app.oats.cli</string>
 	<key>CFBundleName</key>
 	<string>oats</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.2.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
-	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Oats records system audio so it can transcribe your meetings entirely on this Mac.</string>
 	<key>NSMicrophoneUsageDescription</key>

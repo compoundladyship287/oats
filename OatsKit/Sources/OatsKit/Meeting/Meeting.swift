@@ -12,6 +12,19 @@ public struct Meeting: Codable, Sendable, Identifiable, Equatable {
     public var enhancedNotes: String?
     public var templateID: String
 
+    /// Folder this meeting is filed under, or nil for the top level.
+    ///
+    /// Mirrors a real directory inside the store rather than being an index the
+    /// app maintains — moving a meeting in Finder moves it in Oats, which is the
+    /// whole point of keeping meetings as plain files.
+    public var folder: String?
+
+    /// Seconds actually recorded, excluding time spent paused.
+    ///
+    /// Optional because meetings saved before pausing existed do not have it;
+    /// those fall back to wall-clock elapsed.
+    public var recordedDuration: TimeInterval?
+
     public init(
         id: UUID = UUID(),
         title: String,
@@ -20,7 +33,9 @@ public struct Meeting: Codable, Sendable, Identifiable, Equatable {
         roughNotes: String = "",
         transcript: Transcript = Transcript(),
         enhancedNotes: String? = nil,
-        templateID: String = NoteTemplate.general.id
+        templateID: String = NoteTemplate.general.id,
+        folder: String? = nil,
+        recordedDuration: TimeInterval? = nil
     ) {
         self.id = id
         self.title = title
@@ -30,10 +45,14 @@ public struct Meeting: Codable, Sendable, Identifiable, Equatable {
         self.transcript = transcript
         self.enhancedNotes = enhancedNotes
         self.templateID = templateID
+        self.folder = folder
+        self.recordedDuration = recordedDuration
     }
 
+    /// How long the meeting actually ran. Prefers recorded time so a meeting
+    /// paused for twenty minutes is not reported as twenty minutes longer.
     public var duration: TimeInterval {
-        (endedAt ?? Date()).timeIntervalSince(startedAt)
+        recordedDuration ?? (endedAt ?? Date()).timeIntervalSince(startedAt)
     }
 
     public var template: NoteTemplate { .named(templateID) }

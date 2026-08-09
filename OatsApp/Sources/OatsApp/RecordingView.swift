@@ -8,6 +8,7 @@ import SwiftUI
 /// enhancement pass consults; what the user types is the outline it must
 /// preserve, and that is the whole premise of the product.
 struct RecordingView: View {
+    @Environment(AppSettings.self) private var settings
     @Environment(MeetingSession.self) private var session
 
     var body: some View {
@@ -20,8 +21,10 @@ struct RecordingView: View {
             HSplitView {
                 NotepadPane(text: $session.roughNotes)
                     .frame(minWidth: 320, idealWidth: 560)
-                TranscriptPane(segments: session.segments)
-                    .frame(minWidth: 280, idealWidth: 380)
+                if settings.showTranscriptWhileRecording {
+                    TranscriptPane(segments: session.segments)
+                        .frame(minWidth: 280, idealWidth: 380)
+                }
             }
         }
     }
@@ -34,7 +37,7 @@ private struct RecordingHeader: View {
         @Bindable var session = session
 
         HStack(spacing: 12) {
-            RecordingIndicator(active: session.isRecording)
+            RecordingIndicator(active: session.isCapturing, paused: session.isPaused)
 
             TextField("Meeting title", text: $session.title)
                 .textFieldStyle(.plain)
@@ -72,11 +75,12 @@ private struct RecordingHeader: View {
 
 private struct RecordingIndicator: View {
     let active: Bool
+    var paused: Bool = false
     @State private var pulsing = false
 
     var body: some View {
         Circle()
-            .fill(active ? Color.red : Color.secondary)
+            .fill(paused ? Color.orange : (active ? Color.red : Color.secondary))
             .frame(width: 10, height: 10)
             .opacity(active && pulsing ? 0.35 : 1)
             .animation(

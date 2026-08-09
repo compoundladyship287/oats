@@ -12,20 +12,72 @@ import SwiftUI
 @Observable
 final class MeetingLibrary {
     private(set) var meetings: [Meeting] = []
-    private(set) var loadError: String?
-    let store: MeetingStore
+    private(set) var folders: [String] = []
+    var loadError: String?
+    private let settings: AppSettings
 
-    init(store: MeetingStore = MeetingStore()) {
-        self.store = store
+    init(settings: AppSettings) {
+        self.settings = settings
     }
+
+    /// Resolved on each use so a storage-location change in Settings applies
+    /// immediately rather than at next launch.
+    var store: MeetingStore { settings.store }
 
     func reload() {
         do {
             meetings = try store.list()
+            folders = try store.folders()
             loadError = nil
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    /// Meetings filed under `folder`, or loose at the top level when nil.
+    func meetings(in folder: String?) -> [Meeting] {
+        meetings.filter { $0.folder == folder }
+    }
+
+    /// Folder names that currently hold something, plus every empty folder that
+    /// exists on disk, so a folder you just made does not vanish.
+    var allFolders: [String] {
+        Set(folders + meetings.compactMap(\.folder))
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    // Each of these reloads rather than mutating the array in place: the
+    // filesystem is the source of truth, and re-reading it is cheap next to
+    // getting the two out of step.
+
+    func rename(_ meeting: Meeting, to title: String) {
+        perform { _ = try store.rename(meeting, to: title) }
+    }
+
+    func move(_ meeting: Meeting, to folder: String?) {
+        perform { _ = try store.move(meeting, toFolder: folder) }
+    }
+
+    func delete(_ meeting: Meeting) {
+        perform { try store.delete(meeting) }
+    }
+
+    func createFolder(named name: String) {
+        perform { try store.createFolder(named: name) }
+    }
+
+    func deleteFolder(named name: String) {
+        perform { try store.deleteFolder(named: name) }
+    }
+
+    private func perform(_ work: () throws -> Void) {
+        do {
+            try work()
+            loadError = nil
+        } catch {
+            loadError = error.localizedDescription
+        }
+        reload()
     }
 }
 
@@ -34,12 +86,18 @@ struct LibrarySidebar: View {
     @Environment(MeetingSession.self) private var session
     @Binding var selection: Meeting.ID?
 
+    @State private var renaming: Meeting?
+    @State private var deleting: Meeting?
+    @State private var newFolderName = ""
+    @State private var showingNewFolder = false
+
     var body: some View {
         List(selection: $selection) {
             if session.isBusy {
                 Section {
                     HStack(spacing: 8) {
-                        Image(systemName: "record.circle.fill").foregroundStyle(.red)
+                        Image(systemName: session.isPaused ? "pause.circle.fill" : "record.circle.fill")
+                            .foregroundStyle(session.isPaused ? .orange : .red)
                         Text(session.isRecording ? "In progress" : session.statusText)
                             .lineLimit(1)
                     }
@@ -47,9 +105,29 @@ struct LibrarySidebar: View {
                 }
             }
 
-            Section("Meetings") {
-                ForEach(library.meetings) { meeting in
-                    MeetingRow(meeting: meeting).tag(meeting.id)
+            // Loose meetings first, then a section per folder. A tree with
+            // disclosure would nest more prettily and makes drag-to-file harder
+            // to get right; sections keep everything one click away.
+            let loose = library.meetings(in: nil)
+            if !loose.isEmpty {
+                Section("Meetings") {
+                    ForEach(loose) { row(for: $0) }
+                }
+            }
+
+            ForEach(library.allFolders, id: \.self) { folder in
+                Section {
+                    ForEach(library.meetings(in: folder)) { row(for: $0) }
+                } header: {
+                    HStack {
+                        Label(folder, systemImage: "folder")
+                        Spacer()
+                    }
+                    .contextMenu {
+                        Button("Delete Folder", role: .destructive) {
+                            library.deleteFolder(named: folder)
+                        }
+                    }
                 }
             }
         }
@@ -62,6 +140,106 @@ struct LibrarySidebar: View {
                     description: Text("Recorded meetings are saved to\n\(library.store.baseDirectory.path)"))
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            Button {
+                newFolderName = ""
+                showingNewFolder = true
+            } label: {
+                Label("New Folder", systemImage: "folder.badge.plus")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+        }
+        .alert("New Folder", isPresented: $showingNewFolder) {
+            TextField("Name", text: $newFolderName)
+            Button("Cancel", role: .cancel) {}
+            Button("Create") { library.createFolder(named: newFolderName) }
+        }
+        .sheet(item: $renaming) { meeting in
+            RenameSheet(meeting: meeting) { library.rename(meeting, to: $0) }
+        }
+        .confirmationDialog(
+            "Move “\(deleting?.title ?? "")” to the Trash?",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+            presenting: deleting
+        ) { meeting in
+            Button("Move to Trash", role: .destructive) {
+                if selection == meeting.id { selection = nil }
+                library.delete(meeting)
+            }
+        } message: { _ in
+            Text("The notes and transcript go to the Trash, so you can put them back.")
+        }
+    }
+
+    @ViewBuilder
+    private func row(for meeting: Meeting) -> some View {
+        // `.tag` must be the outermost modifier. Applied before `.contextMenu`
+        // the list stops finding it and selection silently never happens —
+        // clicks land, nothing highlights, the detail pane stays empty.
+        MeetingRow(meeting: meeting)
+            .contextMenu {
+                Button("Rename…") { renaming = meeting }
+
+                Menu("Move to") {
+                    if meeting.folder != nil {
+                        Button("Meetings") { library.move(meeting, to: nil) }
+                    }
+                    ForEach(library.allFolders.filter { $0 != meeting.folder }, id: \.self) { folder in
+                        Button(folder) { library.move(meeting, to: folder) }
+                    }
+                }
+                .disabled(library.allFolders.filter { $0 != meeting.folder }.isEmpty
+                    && meeting.folder == nil)
+
+                Button("Show in Finder") {
+                    NSWorkspace.shared.selectFile(
+                        nil, inFileViewerRootedAtPath: library.store.directory(for: meeting).path)
+                }
+                Divider()
+                Button("Move to Trash", role: .destructive) { deleting = meeting }
+            }
+            .tag(meeting.id)
+    }
+}
+
+private struct RenameSheet: View {
+    let meeting: Meeting
+    let commit: (String) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var title: String
+
+    init(meeting: Meeting, commit: @escaping (String) -> Void) {
+        self.meeting = meeting
+        self.commit = commit
+        _title = State(initialValue: meeting.title)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Rename Meeting").font(.headline)
+            TextField("Title", text: $title)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(save)
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Rename", action: save)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(title.trimmed.isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 360)
+    }
+
+    private func save() {
+        guard !title.trimmed.isEmpty else { return }
+        commit(title)
+        dismiss()
     }
 }
 
@@ -113,6 +291,8 @@ struct MeetingDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                CopyButton(title: copyLabel, text: copyableText)
+                    .disabled(copyableText.isEmpty)
                 Button {
                     NSWorkspace.shared.selectFile(
                         nil, inFileViewerRootedAtPath: folder.path)
@@ -199,7 +379,34 @@ struct MeetingDetailView: View {
         }
     }
 
-    private var folder: URL {
-        library.store.baseDirectory.appendingPathComponent(meeting.folderName)
+    private var folder: URL { library.store.directory(for: meeting) }
+
+    /// Copies whatever the reader is actually looking at. A single "copy" that
+    /// always yielded the notes would be wrong half the time.
+    private var copyLabel: String {
+        switch selectedTab {
+        case .notes: return "Copy Notes"
+        case .myNotes: return "Copy My Notes"
+        case .transcript: return "Copy Transcript"
+        }
+    }
+
+    private var copyableText: String {
+        switch selectedTab {
+        case .notes: return meeting.enhancedNotes ?? ""
+        case .myNotes: return meeting.roughNotes
+        case .transcript:
+            // Speaker-labelled and timestamped, so a pasted transcript still
+            // says who said what and when.
+            return meeting.transcript.merged()
+                .map { segment in
+                    let minutes = Int(segment.start) / 60
+                    let seconds = Int(segment.start) % 60
+                    return String(
+                        format: "%@ %02d:%02d  %@", segment.speaker.displayName, minutes, seconds,
+                        segment.text)
+                }
+                .joined(separator: "\n")
+        }
     }
 }
