@@ -57,23 +57,33 @@ models install themselves on first use if they are not already present, and
 
 ## Install
 
-One command. It clones, builds, and installs both the app and the `oats` CLI:
+With Homebrew:
+
+```bash
+brew install yuvrajadhikari/oats/oats
+```
+
+Or without:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yuvrajadhikari/oats/main/install.sh | bash
 ```
 
-Then `open -a Oats`, or run `oats doctor` to check your setup.
+Either way, run `oats doctor` to check your setup, then open the app. Homebrew
+puts it in the prefix and prints how to link it into `/Applications`; the
+script installs it there directly.
 
-Re-run it to update. `install.sh --uninstall` removes it, leaving your meetings
-alone.
+Update with `brew upgrade oats`, or by re-running the script. Remove with
+`brew uninstall oats`, or `install.sh --uninstall`. Your meetings are left
+alone either way — they are plain files in `~/Documents/Oats`.
 
 <details>
 <summary>Piping a script to bash, for a privacy tool?</summary>
 
-Fair objection. [`install.sh`](install.sh) is short and meant to be read — it
-checks your macOS version, clones this repo, runs `swift build`, and copies the
-result into `/Applications`. Nothing else. If you would rather look first:
+Fair objection, and Homebrew is the better option if you have it.
+[`install.sh`](install.sh) is short and meant to be read — it checks your macOS
+version, clones this repo, runs `swift build`, and copies the result into
+`/Applications`. Nothing else. If you would rather look first:
 
 ```bash
 git clone https://github.com/yuvrajadhikari/oats.git && cd oats
