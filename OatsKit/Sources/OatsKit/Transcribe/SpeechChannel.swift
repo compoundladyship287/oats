@@ -63,9 +63,24 @@ public final class SpeechChannel: @unchecked Sendable {
         return locale
     }
 
+    /// - Parameters:
+    ///   - detectVoiceActivity: Adds Apple's `SpeechDetector` module, so the
+    ///     analyzer only transcribes audio it believes contains speech.
+    ///
+    ///     Required on the microphone. Fed a continuous bed of room tone, the
+    ///     transcriber does not return nothing — it returns fluent, confident,
+    ///     invented sentences, which then reach the enhancement prompt as if
+    ///     they had been said. An energy gate cannot separate these: measured on
+    ///     this machine, room noise reaches -30 dBFS while speech picked up from
+    ///     the speakers sits at a median of -31 dBFS. The distributions overlap,
+    ///     so the discrimination has to be acoustic rather than merely loud.
+    ///
+    ///     Left off for the tap, which is a bit-exact copy of what the Mac
+    ///     played and has no room tone to reject.
     public static func make(
         speaker: Speaker,
         locale: Locale,
+        detectVoiceActivity: Bool = false,
         onSegment: @escaping @Sendable (TranscriptSegment) -> Void
     ) async throws -> SpeechChannel {
         let transcriber = SpeechTranscriber(
@@ -74,19 +89,28 @@ public final class SpeechChannel: @unchecked Sendable {
             reportingOptions: [],
             attributeOptions: [.audioTimeRange])
 
-        if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]
-        ) {
+        // `reportResults: false` because Oats only wants the detector's gating
+        // effect on the transcriber, not a second results stream to consume.
+        let detector: SpeechDetector? =
+            detectVoiceActivity
+            ? SpeechDetector(
+                detectionOptions: .init(sensitivityLevel: .medium), reportResults: false)
+            : nil
+
+        let modules: [any SpeechModule] = detector.map { [$0, transcriber] } ?? [transcriber]
+
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: modules) {
             try await request.downloadAndInstall()
         }
 
-        guard
-            let format = await SpeechAnalyzer.bestAvailableAudioFormat(
-                compatibleWith: [transcriber])
+        // Must be negotiated against every module, not just the transcriber, or
+        // the detector may be handed audio it cannot read.
+        guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: modules)
         else {
             throw CaptureError.message("No compatible audio format for the speech analyzer")
         }
 
-        let analyzer = SpeechAnalyzer(modules: [transcriber])
+        let analyzer = SpeechAnalyzer(modules: modules)
         return SpeechChannel(
             speaker: speaker, transcriber: transcriber, analyzer: analyzer,
             analyzerFormat: format, onSegment: onSegment)

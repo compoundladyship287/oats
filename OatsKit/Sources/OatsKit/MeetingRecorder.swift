@@ -52,11 +52,14 @@ public final class MeetingRecorder: @unchecked Sendable {
         // two channels' timelines relative to each other.
         try tap.prepare()
 
+        // Voice activity detection runs on the microphone only. The mic hears
+        // the room and the transcriber turns room tone into invented sentences;
+        // the tap is a clean digital copy with nothing to reject.
         systemChannel = try await SpeechChannel.make(
             speaker: .them, locale: locale, onSegment: collect)
         if microphoneAvailable {
             microphoneChannel = try await SpeechChannel.make(
-                speaker: .me, locale: locale, onSegment: collect)
+                speaker: .me, locale: locale, detectVoiceActivity: true, onSegment: collect)
         }
 
         // One origin shared by both channels, established before either starts.

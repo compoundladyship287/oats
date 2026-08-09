@@ -179,6 +179,17 @@ fault 1 above, and it will catch a recurrence on other hardware.
   (dBFS) and frame-continuity accounting**, never with "it didn't throw".
 - **Never enable the voice-processing unit while the tap is running.** It kills
   the tap outright and silences the mic after conversion. Full detail above.
+- **The analyzer's audio format is 1 ch / 16 kHz / Int16, interleaved** — not
+  float. `bestAvailableAudioFormat` decides this, so any code reading those
+  buffers via `floatChannelData` gets `nil` and does nothing. That cost real
+  time here: a noise gate measured every buffer as -inf dBFS and muted nothing,
+  presenting as a gate that ran and had no effect. Same shape as the
+  interleaved-stereo trap below — the wrong layout returns a plausible answer
+  instead of an error. Handle `int16ChannelData`, and make "cannot measure"
+  distinguishable from "silent".
+- **The process tap only fires while some process is playing audio.** Zero
+  callbacks in a silent room is expected, not a regression. Verify the tap with
+  audio actually playing.
 - A `withTaskGroup` race is not a timeout. The group awaits all children on
   scope exit, so racing cancellable work against `Task.sleep` only bounds
   anything if the work actually honours cancellation. Several Speech APIs do
@@ -245,48 +256,56 @@ bundle on this machine and audio flowed — the handoff's open question about
 the code identity on every rebuild, so macOS may eventually treat a build as a
 new app and ask again.
 
-### ⚠️ The defect the app exposed: the mic channel hallucinates
+### The mic hallucination, found and fixed
 
 Running a real meeting through the UI made something obvious that short CLI
-tests hid. On the "Me" channel, `SpeechAnalyzer` invents confident sentences out
-of room noise. From one 60-second recording where nobody spoke into the mic:
+tests hid. On the "Me" channel, `SpeechAnalyzer` invented confident sentences
+out of room noise. From one 60-second recording where nobody spoke into the mic:
 
 ```
  0.27 me  Yeah, that's how I'm going to do.
- 4.77 me  What?
 10.47 me  I took my dog.
 14.85 me  You're the ones four told us about.
 19.29 me  Tall back, not back, good looking, needed, say, reason.
 ```
 
-26 segments, roughly 20 of them fabricated. The "Them" channel was correct
-throughout. This is not cosmetic: that text lands in the transcript, feeds the
-enhancement prompt, and produced notes about "the price of the property" for a
-meeting that had no such discussion.
+26 segments, roughly 20 fabricated. The "Them" channel was correct throughout.
+Not cosmetic: that text fed the enhancement prompt and produced notes about "the
+price of the property" for a meeting with no such discussion.
 
-Why the obvious fix is not obvious: a simple level gate does not separate these.
-Measured on this machine, the mic's peak in a *quiet* room is **-23 to -32
-dBFS**, which overlaps the level of real speech. It needs an adaptive gate —
-track a running noise floor per channel, open on an RMS excursion above it with
-a hangover so speech onsets are not clipped, and keep advancing the frame
-counter for suppressed buffers so the shared timeline stays correct. Worth
-tuning against real speech rather than guessed thresholds, and worth a unit test
-with synthetic buffers.
+**The fix is `SpeechDetector`**, Apple's voice-activity module, added alongside
+`SpeechTranscriber` in the same `SpeechAnalyzer`. The analyzer then only
+transcribes audio it believes contains speech. It runs on the microphone only —
+the tap is a clean digital copy with no room tone to reject.
 
-Until that lands, the app is honest but noisy: headphones and a quiet room help,
-and the transcript tab shows exactly what the model was given.
+```swift
+SpeechChannel.make(speaker: .me, locale: locale, detectVoiceActivity: true, ...)
+```
+
+Measured before and after, same room:
+
+| Scenario | Before | After |
+|---|---|---|
+| 45–60 s, nobody speaking | ~20–26 fabricated segments | **0 segments** |
+| Speech through the speakers | transcribed | transcribed, unchanged |
+
+**An energy gate was tried first and abandoned — do not retry it.** It cannot
+work here, and the measurements say why: in this room the mic's noise reaches
+**-30 dBFS** while speech picked up from the speakers has a **median of -31
+dBFS**. The distributions overlap, so no threshold, adaptive or otherwise,
+separates them. The discrimination has to be acoustic. An adaptive-floor gate
+was written, tuned, tested, and deleted once `SpeechDetector` was found; the
+commit history has it if the reasoning is ever needed again.
 
 ## Roadmap from here
 
-1. **Fix the mic hallucination above.** It is the single biggest quality problem
-   and it degrades the enhancement, which is the product's whole point.
-2. **Echo, properly.** Today's defence is transcript-level dedup, which works
+1. **Echo, properly.** Today's defence is transcript-level dedup, which works
    but is downstream and lossy by nature — it can only drop whole utterances,
    and it deliberately refuses to touch anything under four words. Since Oats
    already captures the exact signal being played, a real AEC with the tap as
    reference is achievable and would let "Me" survive genuine interruptions on
-   speakers. The adaptive gate and the AEC are the same spike, really.
-3. **App polish.** Editing a saved meeting's title, re-running enhancement with
+   speakers.
+2. **App polish.** Editing a saved meeting's title, re-running enhancement with
    a different template, deleting a meeting, and a settings pane for the storage
    location. None are wired up yet.
 3. EventKit calendar integration — auto-detect meeting start, use event title

@@ -34,7 +34,7 @@ flow — and removes the cloud entirely.
 | Hearing the far end | Core Audio process tap — reads the system's own output, so no bot joins and every meeting app works |
 | Hearing you | Separate microphone stream. The OS echo canceller cannot be used — it stops the process tap dead — so speaker bleed is removed from the transcript afterwards instead |
 | Who said what | The two streams *are* the speaker labels: mic = you, tap = them. No diarization model |
-| Transcription | Apple `SpeechAnalyzer`, on-device, ~44× realtime |
+| Transcription | Apple `SpeechAnalyzer`, on-device, ~44× realtime, with `SpeechDetector` gating the mic so room noise is not transcribed into invented sentences |
 | Enhancement | Apple Foundation Models, on-device |
 | Storage | Plain Markdown + JSON in `~/Documents/Oats`. Greppable, syncable, Obsidian-friendly, no lock-in |
 
