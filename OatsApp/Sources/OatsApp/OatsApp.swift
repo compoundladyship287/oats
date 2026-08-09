@@ -175,37 +175,47 @@ struct RootView: View {
     }
 }
 
-/// The one control that has to be unmistakable.
+/// Toolbar control: start a new meeting, or stop the running one.
 ///
-/// As a bare toolbar item this rendered as a small monochrome glyph that read as
-/// "some circle", which is a poor showing for the button the whole app exists
-/// around. It is now tinted, labelled in words, and red while recording.
+/// It says "New Meeting" rather than "Record" because of where it sits. Above an
+/// open meeting, a button labelled "Record" reads as *record into this meeting*,
+/// and it does the opposite — it starts a fresh one. Naming the action removes
+/// the ambiguity that position creates. Recording into the meeting you are
+/// looking at is `Resume`, which lives on the meeting itself.
+///
+/// Prominence comes from the red dot, not from a filled blue slab, which was too
+/// loud for a toolbar sitting above quiet text. Stop earns the solid treatment:
+/// it is momentary, destructive of the recording, and should be hard to miss.
 struct RecordButton: View {
     @Environment(MeetingSession.self) private var session
     @Environment(MeetingLibrary.self) private var library
     let newMeeting: () -> Void
 
     var body: some View {
-        Button {
-            if session.isRecording {
+        if session.isRecording {
+            Button {
                 Task {
                     await session.stop()
                     library.reload()
                 }
-            } else {
-                newMeeting()
+            } label: {
+                Label("Stop", systemImage: "stop.fill")
             }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: session.isRecording ? "stop.fill" : "record.circle.fill")
-                Text(session.isRecording ? "Stop" : "Record")
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .help("Stop and write up the meeting")
+        } else {
+            Button(action: newMeeting) {
+                HStack(spacing: 6) {
+                    Image(systemName: "record.circle.fill")
+                        .foregroundStyle(.red)
+                    Text("New Meeting")
+                }
             }
-            .font(.body.weight(.medium))
+            .buttonStyle(.bordered)
+            .disabled(session.isBusy)
+            .help("Name a meeting and start recording (⌘N)")
         }
-        .buttonStyle(.borderedProminent)
-        .tint(session.isRecording ? .red : .accentColor)
-        .disabled(session.isBusy && !session.isRecording)
-        .help(session.isRecording ? "Stop and write up the meeting" : "Start a new meeting")
     }
 }
 

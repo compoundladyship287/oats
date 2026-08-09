@@ -309,10 +309,17 @@ struct MeetingDetailView: View {
                 // Without this, a saved meeting is a dead end: the only way to
                 // keep recording is a new meeting, and a call that resumes after
                 // a break ends up split across two folders.
+                // Same red dot as the toolbar's New Meeting, so "red dot" reads
+                // consistently as "this starts recording" — the difference being
+                // that this one records into the meeting you are looking at.
                 Button {
                     Task { await session.resume(meeting) }
                 } label: {
-                    Label("Resume", systemImage: "record.circle")
+                    HStack(spacing: 6) {
+                        Image(systemName: "record.circle.fill")
+                            .foregroundStyle(.red)
+                        Text("Resume")
+                    }
                 }
                 .disabled(session.isBusy)
                 .help("Record more into this meeting and rewrite its notes")
