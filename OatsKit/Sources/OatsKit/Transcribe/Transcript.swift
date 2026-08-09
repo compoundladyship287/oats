@@ -58,6 +58,34 @@ public struct Transcript: Codable, Sendable, Equatable {
         segments.insert(segment, at: index)
     }
 
+    /// Appends a later recording session onto this one.
+    ///
+    /// Resuming a meeting starts a fresh recorder, so its segments are timed
+    /// from zero again. Shifting them past the end of what is already here keeps
+    /// one increasing timeline, which everything downstream assumes: `merged()`
+    /// joins by adjacency, `withoutEcho()` compares within a time window, and
+    /// the transcript view reads top to bottom.
+    ///
+    /// - Parameter gap: Silence inserted between the two sessions, so a resumed
+    ///   meeting does not look like the speaker continued mid-sentence.
+    public func appending(_ later: Transcript, gap: TimeInterval = 1) -> Transcript {
+        guard !later.isEmpty else { return self }
+        guard !isEmpty else { return later }
+
+        let offset = (segments.map(\.end).max() ?? 0) + gap
+        var combined = self
+        for segment in later.segments {
+            combined.insert(
+                TranscriptSegment(
+                    id: segment.id,
+                    speaker: segment.speaker,
+                    text: segment.text,
+                    start: segment.start + offset,
+                    end: segment.end + offset))
+        }
+        return combined
+    }
+
     /// Speaker-labelled plain text, which is what the enhancement prompt sees.
     public func formatted() -> String {
         segments

@@ -141,16 +141,30 @@ struct LibrarySidebar: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            Button {
-                newFolderName = ""
-                showingNewFolder = true
-            } label: {
-                Label("New Folder", systemImage: "folder.badge.plus")
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 14) {
+                Button {
+                    NotificationCenter.default.post(name: .newMeeting, object: nil)
+                } label: {
+                    Label("New Meeting", systemImage: "plus.circle.fill")
+                }
+                .disabled(session.isBusy)
+                .help("Name a meeting and start recording (⌘N)")
+
+                Spacer()
+
+                Button {
+                    newFolderName = ""
+                    showingNewFolder = true
+                } label: {
+                    Label("New Folder", systemImage: "folder.badge.plus")
+                        .labelStyle(.iconOnly)
+                }
+                .help("New folder")
             }
             .buttonStyle(.plain)
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
+            .background(.bar)
         }
         .alert("New Folder", isPresented: $showingNewFolder) {
             TextField("Name", text: $newFolderName)
@@ -269,6 +283,7 @@ private struct MeetingRow: View {
 struct MeetingDetailView: View {
     let meeting: Meeting
     @Environment(MeetingLibrary.self) private var library
+    @Environment(MeetingSession.self) private var session
     /// Resolved against `availableTabs` before use — a meeting that was never
     /// enhanced has no Notes tab, and defaulting to it stranded the reader on
     /// "These notes were not enhanced." instead of the transcript they do have.
@@ -291,6 +306,17 @@ struct MeetingDetailView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                // Without this, a saved meeting is a dead end: the only way to
+                // keep recording is a new meeting, and a call that resumes after
+                // a break ends up split across two folders.
+                Button {
+                    Task { await session.resume(meeting) }
+                } label: {
+                    Label("Resume", systemImage: "record.circle")
+                }
+                .disabled(session.isBusy)
+                .help("Record more into this meeting and rewrite its notes")
+
                 CopyButton(title: copyLabel, text: copyableText)
                     .disabled(copyableText.isEmpty)
                 Button {

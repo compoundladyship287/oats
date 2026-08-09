@@ -188,3 +188,49 @@ final class MeetingStoreOrganisationTests: XCTestCase {
         XCTAssertEqual(legacy.duration, 300, "older meetings fall back to wall clock")
     }
 }
+
+/// Resuming a meeting: a second recording session appended to the first.
+final class TranscriptAppendTests: XCTestCase {
+    private func transcript(_ entries: [(Speaker, String, TimeInterval, TimeInterval)]) -> Transcript {
+        var transcript = Transcript()
+        for entry in entries {
+            transcript.insert(
+                TranscriptSegment(speaker: entry.0, text: entry.1, start: entry.2, end: entry.3))
+        }
+        return transcript
+    }
+
+    func testLaterSessionIsShiftedPastTheFirst() {
+        let first = transcript([(.them, "Opening remarks", 0, 10)])
+        // A resumed session starts from zero again, which is the whole problem.
+        let second = transcript([(.me, "Second half", 0, 5)])
+
+        let combined = first.appending(second, gap: 1)
+
+        XCTAssertEqual(combined.segments.map(\.text), ["Opening remarks", "Second half"])
+        XCTAssertEqual(combined.segments[1].start, 11, "shifted past the end plus the gap")
+        XCTAssertEqual(combined.segments[1].end, 16)
+    }
+
+    func testTimelineStaysIncreasing() {
+        let first = transcript([(.them, "a", 0, 4), (.me, "b", 5, 9)])
+        let second = transcript([(.them, "c", 0, 2), (.me, "d", 3, 6)])
+
+        let starts = first.appending(second).segments.map(\.start)
+        XCTAssertEqual(starts, starts.sorted(), "everything downstream assumes one ordered timeline")
+    }
+
+    func testAppendingToOrFromEmptyIsLossless() {
+        let real = transcript([(.them, "only", 0, 3)])
+        XCTAssertEqual(Transcript().appending(real).segments.count, 1)
+        XCTAssertEqual(real.appending(Transcript()).segments.count, 1)
+        XCTAssertEqual(real.appending(Transcript()).segments[0].start, 0, "no phantom shift")
+    }
+
+    func testSegmentsKeepTheirIdentityAcrossTheShift() {
+        let second = transcript([(.me, "kept", 0, 1)])
+        let id = second.segments[0].id
+        let combined = transcript([(.them, "first", 0, 2)]).appending(second)
+        XCTAssertEqual(combined.segments[1].id, id)
+    }
+}

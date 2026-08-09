@@ -40,6 +40,13 @@ final class MeetingSession {
     /// Set when a meeting has just been saved, so the library can select it.
     private(set) var lastSaved: Meeting?
 
+    /// The saved meeting this session is continuing, if any.
+    ///
+    /// Resuming keeps the original meeting's identity — same id, same start
+    /// time, same folder — so it saves back over itself instead of spawning a
+    /// second folder for what the user thinks of as one meeting.
+    private(set) var resuming: Meeting?
+
     private var recorder: MeetingRecorder?
     private var startedAt = Date()
     private var ticker: Task<Void, Never>?
@@ -63,12 +70,26 @@ final class MeetingSession {
     var statusText: String {
         switch phase {
         case .idle: return "Ready"
-        case .starting: return "Preparing on-device models…"
+        case .starting:
+            return resuming == nil
+                ? "Preparing on-device models…" : "Resuming — preparing models…"
         case .recording: return elapsed.clockString
         case .paused: return "Paused · \(elapsed.clockString)"
         case .finishing: return "Finishing transcription…"
         case .enhancing: return "Writing your notes…"
         }
+    }
+
+    /// Continues a saved meeting: new audio is appended to its transcript and
+    /// its notes are rewritten over the whole thing.
+    func resume(_ meeting: Meeting) async {
+        guard phase == .idle else { return }
+        resuming = meeting
+        title = meeting.title
+        roughNotes = meeting.roughNotes
+        templateID = meeting.templateID
+        folder = meeting.folder
+        await start()
     }
 
     func start() async {
@@ -130,9 +151,23 @@ final class MeetingSession {
         ticker?.cancel()
         ticker = nil
 
-        let transcript = await recorder.stop()
+        let captured = await recorder.stop()
         self.recorder = nil
+
+        // A resumed session records from zero again, so shift it past what the
+        // meeting already had rather than interleaving two timelines.
+        let transcript = resuming.map { $0.transcript.appending(captured) } ?? captured
         segments = transcript.segments
+
+        // Resuming and capturing nothing must not overwrite a good meeting with
+        // a re-run of the enhancement over identical evidence.
+        if let resuming, captured.isEmpty {
+            errorMessage =
+                "Nothing new was captured, so “\(resuming.title)” was left as it was."
+            phase = .idle
+            self.resuming = nil
+            return nil
+        }
 
         // A meeting with neither a transcript nor notes is not worth a folder,
         // and silently writing an empty one would look like data loss later.
@@ -144,15 +179,18 @@ final class MeetingSession {
             return nil
         }
 
+        // Keep the original identity when resuming, so this overwrites the same
+        // folder on disk instead of creating a second one.
         var meeting = Meeting(
+            id: resuming?.id ?? UUID(),
             title: resolvedTitle,
-            startedAt: startedAt,
+            startedAt: resuming?.startedAt ?? startedAt,
             endedAt: Date(),
             roughNotes: roughNotes,
             transcript: transcript,
             templateID: templateID,
             folder: folder,
-            recordedDuration: recordedDuration)
+            recordedDuration: (resuming?.recordedDuration ?? 0) + recordedDuration)
 
         // Never skip this silently. A meeting that comes back as "transcript
         // only" with no explanation looks like the app quietly did half its job,
@@ -196,6 +234,7 @@ final class MeetingSession {
         roughNotes = ""
         title = ""
         folder = nil
+        resuming = nil
         templateID = settings.defaultTemplateID
         return meeting
     }
@@ -212,7 +251,10 @@ final class MeetingSession {
 
     private func refreshSegments() {
         guard let recorder else { return }
-        segments = recorder.currentTranscript().segments
+        let live = recorder.currentTranscript()
+        // Show what the meeting already had above the new audio, so a resumed
+        // session reads as a continuation rather than starting from a blank panel.
+        segments = (resuming.map { $0.transcript.appending(live) } ?? live).segments
     }
 
     private func startTicker() {

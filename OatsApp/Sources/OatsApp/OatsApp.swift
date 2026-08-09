@@ -175,6 +175,11 @@ struct RootView: View {
     }
 }
 
+/// The one control that has to be unmistakable.
+///
+/// As a bare toolbar item this rendered as a small monochrome glyph that read as
+/// "some circle", which is a poor showing for the button the whole app exists
+/// around. It is now tinted, labelled in words, and red while recording.
 struct RecordButton: View {
     @Environment(MeetingSession.self) private var session
     @Environment(MeetingLibrary.self) private var library
@@ -191,10 +196,14 @@ struct RecordButton: View {
                 newMeeting()
             }
         } label: {
-            Label(
-                session.isRecording ? "Stop" : "Record",
-                systemImage: session.isRecording ? "stop.fill" : "record.circle")
+            HStack(spacing: 6) {
+                Image(systemName: session.isRecording ? "stop.fill" : "record.circle.fill")
+                Text(session.isRecording ? "Stop" : "Record")
+            }
+            .font(.body.weight(.medium))
         }
+        .buttonStyle(.borderedProminent)
+        .tint(session.isRecording ? .red : .accentColor)
         .disabled(session.isBusy && !session.isRecording)
         .help(session.isRecording ? "Stop and write up the meeting" : "Start a new meeting")
     }

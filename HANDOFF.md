@@ -368,6 +368,21 @@ across the gap, and `recordedDuration` excludes the pause. Verified end to end:
 a sentence spoken while paused does not reach the transcript, and a 71-second
 wall-clock meeting with a pause recorded 62 seconds.
 
+### Resuming a meeting
+
+Recording used to be global: a saved meeting was a dead end, so a call that
+picked up after a break became two unrelated folders. `MeetingSession.resume(_:)`
+continues one instead — same id, same start time, same folder, so it saves back
+over itself.
+
+The new session records from zero again, so `Transcript.appending(_:gap:)`
+shifts it past the end of what is already there. One increasing timeline is an
+assumption baked into everything downstream: `merged()` joins by adjacency,
+`withoutEcho()` compares within a time window, and the transcript view reads top
+to bottom. Enhancement then reruns over the combined transcript, so the notes
+cover both halves. Resuming and capturing nothing is refused rather than
+overwriting a good meeting with a re-run over identical evidence.
+
 ### Folders
 
 Meetings live at `base/<folder>/<meeting>`, one directory each, and
