@@ -24,8 +24,17 @@ for argument in "$@"; do
     esac
 done
 
-swift build -c "$CONFIGURATION"
-BINARY="$(swift build -c "$CONFIGURATION" --show-bin-path)/OatsApp"
+# Extra flags for `swift build`, mainly so packagers can pass --disable-sandbox.
+# SwiftPM sandboxes its own manifest evaluation, and that cannot nest inside an
+# outer sandbox: under `brew install` it fails with
+#   sandbox-exec: sandbox_apply: Operation not permitted
+# which reads like a permissions problem with the formula rather than what it
+# is. Word splitting is intended here.
+# shellcheck disable=SC2086
+SWIFT_BUILD_FLAGS="${SWIFT_BUILD_FLAGS:-}"
+
+swift build -c "$CONFIGURATION" $SWIFT_BUILD_FLAGS
+BINARY="$(swift build -c "$CONFIGURATION" $SWIFT_BUILD_FLAGS --show-bin-path)/OatsApp"
 
 APP="build/Oats.app"
 rm -rf "$APP"
